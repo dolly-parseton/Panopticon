@@ -1,0 +1,5 @@
+[
+  {"event_id": 1, "type": "click", "timestamp": "2024-01-15T10:30:00Z"},
+  {"event_id": 2, "type": "view", "timestamp": "2024-01-15T10:31:00Z"},
+  {"event_id": 3, "type": "purchase", "timestamp": "2024-01-15T10:32:00Z"}
+]
