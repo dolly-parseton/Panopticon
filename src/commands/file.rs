@@ -1,7 +1,4 @@
-use std::path::PathBuf;
-use std::sync::LazyLock;
-
-use crate::prelude::*;
+use crate::imports::*;
 use polars::prelude::SerReader;
 
 static FILECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = LazyLock::new(|| {
@@ -13,25 +10,33 @@ static FILECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = Lazy
                     name: "name",
                     ty: TypeDef::Scalar(ScalarType::String),
                     required: true,
-                    hint: Some("Identifier for this file in the TabularStore"),
+                    hint: Some(
+                        "Identifier for this file in the TabularStore (supports tera templates)",
+                    ),
+                    reference_kind: ReferenceKind::StaticTeraTemplate,
                 },
                 FieldSpec {
                     name: "file",
                     ty: TypeDef::Scalar(ScalarType::String),
                     required: true,
-                    hint: Some("Path to the file to read"),
+                    hint: Some("Path to the file to read (supports tera templates)"),
+                    reference_kind: ReferenceKind::StaticTeraTemplate,
                 },
                 FieldSpec {
                     name: "format",
                     ty: TypeDef::Scalar(ScalarType::String),
                     required: true,
-                    hint: Some("Format of the file: csv, json, or parquet"),
+                    hint: Some(
+                        "Format of the file: csv, json, or parquet (supports tera templates)",
+                    ),
+                    reference_kind: ReferenceKind::StaticTeraTemplate,
                 },
             ],
         })),
         required: true,
         hint: Some("Array of {name, file, format} objects to read"),
         default_value: None,
+        reference_kind: ReferenceKind::Unsupported,
     }]
 });
 
@@ -79,7 +84,6 @@ impl Executable for FileCommand {
                 "Loading file"
             );
 
-            // Check if file exists, isn't a directory, and is readable
             if !file_spec.file.exists() {
                 return Err(anyhow::anyhow!(
                     "File does not exist: {}",
@@ -146,58 +150,21 @@ impl Executable for FileCommand {
             total_rows += row_count;
             total_size += file_size;
 
-            // Insert per-file outputs into context using name as segment
             let file_prefix = output_prefix.with_segment(&file_spec.name);
+            let out = InsertBatch::new(context, &file_prefix);
 
-            context
-                .tabular()
-                .insert(&file_prefix.with_segment("data"), df)
-                .await?;
-            context
-                .scalar()
-                .insert(
-                    &file_prefix.with_segment("rows"),
-                    ScalarValue::Number(row_count.into()),
-                )
-                .await?;
-            context
-                .scalar()
-                .insert(
-                    &file_prefix.with_segment("size"),
-                    ScalarValue::Number(file_size.into()),
-                )
-                .await?;
-            context
-                .scalar()
-                .insert(
-                    &file_prefix.with_segment("columns"),
-                    ScalarValue::Array(column_names),
-                )
+            out.tabular("data", df).await?;
+            out.u64("rows", row_count).await?;
+            out.u64("size", file_size).await?;
+            out.scalar("columns", ScalarValue::Array(column_names))
                 .await?;
         }
 
         // Insert summary outputs
-        context
-            .scalar()
-            .insert(
-                &output_prefix.with_segment("count"),
-                ScalarValue::Number((self.files.len() as i64).into()),
-            )
-            .await?;
-        context
-            .scalar()
-            .insert(
-                &output_prefix.with_segment("total_rows"),
-                ScalarValue::Number(total_rows.into()),
-            )
-            .await?;
-        context
-            .scalar()
-            .insert(
-                &output_prefix.with_segment("total_size"),
-                ScalarValue::Number(total_size.into()),
-            )
-            .await?;
+        let out = InsertBatch::new(context, output_prefix);
+        out.i64("count", self.files.len() as i64).await?;
+        out.u64("total_rows", total_rows).await?;
+        out.u64("total_size", total_size).await?;
 
         Ok(())
     }
@@ -207,7 +174,7 @@ impl Descriptor for FileCommand {
     fn command_type() -> &'static str {
         "FileCommand"
     }
-    fn available_attributes() -> &'static [AttributeSpec<&'static str>] {
+    fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &FILECOMMAND_ATTRIBUTES
     }
     fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
@@ -217,41 +184,21 @@ impl Descriptor for FileCommand {
 
 impl FromAttributes for FileCommand {
     fn from_attributes(attrs: &Attributes) -> Result<Self> {
-        // Parse files array
-        let files_value = attrs
-            .get("files")
-            .context("Missing required attribute 'files'")?;
-
-        let files_array = files_value
-            .as_array()
-            .context("Attribute 'files' must be an array")?;
+        let files_array = attrs.get_required("files")?.as_array_or_err("files")?;
 
         let mut files = Vec::with_capacity(files_array.len());
         for (i, file_value) in files_array.iter().enumerate() {
-            let file_obj = file_value
-                .as_object()
-                .context(format!("files[{}] must be an object", i))?;
+            let file_obj = file_value.as_object_or_err(&format!("files[{}]", i))?;
 
             let name = file_obj
-                .get("name")
-                .context(format!("files[{}] missing 'name' field", i))?
-                .as_str()
-                .context(format!("files[{}].name must be a string", i))?
-                .to_string();
-
+                .get_required_string("name")
+                .context(format!("files[{}]", i))?;
             let file = file_obj
-                .get("file")
-                .context(format!("files[{}] missing 'file' field", i))?
-                .as_str()
-                .context(format!("files[{}].file must be a string", i))?
-                .to_string();
-
+                .get_required_string("file")
+                .context(format!("files[{}]", i))?;
             let format = file_obj
-                .get("format")
-                .context(format!("files[{}] missing 'format' field", i))?
-                .as_str()
-                .context(format!("files[{}].format must be a string", i))?
-                .to_string();
+                .get_required_string("format")
+                .context(format!("files[{}]", i))?;
 
             files.push(FileSpec {
                 name,
@@ -267,6 +214,7 @@ impl FromAttributes for FileCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::imports::*;
 
     fn fixtures_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
@@ -280,7 +228,30 @@ mod tests {
         }
     }
 
-    async fn get_summary(context: &ExecutionContext, prefix: &StorePath) -> (i64, u64, u64) {
+    /// Helper to build file command attributes
+    fn file_attrs(files: Vec<FileSpec>) -> Attributes {
+        let file_values: Vec<ScalarValue> = files
+            .into_iter()
+            .map(|f| {
+                ObjectBuilder::new()
+                    .insert("name", f.name)
+                    .insert("file", f.file.to_string_lossy().to_string())
+                    .insert("format", f.format)
+                    .build_scalar()
+            })
+            .collect();
+
+        ObjectBuilder::new()
+            .insert("files", ScalarValue::Array(file_values))
+            .build_hashmap()
+    }
+
+    async fn get_summary(
+        context: &ExecutionContext,
+        namespace: &str,
+        command: &str,
+    ) -> (i64, u64, u64) {
+        let prefix = StorePath::from_segments([namespace, command]);
         let count = context
             .scalar()
             .get(&prefix.with_segment("count"))
@@ -310,9 +281,11 @@ mod tests {
 
     async fn get_file_outputs(
         context: &ExecutionContext,
-        prefix: &StorePath,
+        namespace: &str,
+        command: &str,
         name: &str,
     ) -> (u64, u64, Vec<String>) {
+        let prefix = StorePath::from_segments([namespace, command]);
         let file_prefix = prefix.with_segment(name);
         let rows = context
             .scalar()
@@ -347,30 +320,34 @@ mod tests {
     #[tokio::test]
     async fn test_load_single_csv() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = FileCommand {
-            files: vec![make_file_spec(
-                "users",
-                fixtures_dir().join("users.csv").to_str().unwrap(),
-                "csv",
-            )],
-        };
+        let attrs = file_attrs(vec![make_file_spec(
+            "users",
+            fixtures_dir().join("users.csv").to_str().unwrap(),
+            "csv",
+        )]);
 
-        cmd.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("load", &attrs)
+            .unwrap();
 
-        let (count, total_rows, total_size) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, total_size) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 1);
         assert_eq!(total_rows, 3);
         assert!(total_size > 0);
 
-        let (rows, size, columns) = get_file_outputs(&context, &prefix, "users").await;
+        let (rows, size, columns) = get_file_outputs(&context, "exec", "load", "users").await;
         assert_eq!(rows, 3);
         assert!(size > 0);
         assert_eq!(columns, vec!["id", "name", "email", "age"]);
 
         // Verify tabular data exists
+        let prefix = StorePath::from_segments(["exec", "load"]);
         let df = context
             .tabular()
             .get(&prefix.with_segment("users").with_segment("data"))
@@ -384,24 +361,27 @@ mod tests {
     #[tokio::test]
     async fn test_load_single_json() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = FileCommand {
-            files: vec![make_file_spec(
-                "events",
-                fixtures_dir().join("events.json").to_str().unwrap(),
-                "json",
-            )],
-        };
+        let attrs = file_attrs(vec![make_file_spec(
+            "events",
+            fixtures_dir().join("events.json").to_str().unwrap(),
+            "json",
+        )]);
 
-        cmd.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("load", &attrs)
+            .unwrap();
 
-        let (count, total_rows, _) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, _) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 1);
         assert_eq!(total_rows, 3);
 
-        let (rows, _, columns) = get_file_outputs(&context, &prefix, "events").await;
+        let (rows, _, columns) = get_file_outputs(&context, "exec", "load", "events").await;
         assert_eq!(rows, 3);
         assert!(columns.contains(&"event_id".to_string()));
         assert!(columns.contains(&"type".to_string()));
@@ -411,24 +391,27 @@ mod tests {
     #[tokio::test]
     async fn test_load_single_parquet() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = FileCommand {
-            files: vec![make_file_spec(
-                "metrics",
-                fixtures_dir().join("metrics.parquet").to_str().unwrap(),
-                "parquet",
-            )],
-        };
+        let attrs = file_attrs(vec![make_file_spec(
+            "metrics",
+            fixtures_dir().join("metrics.parquet").to_str().unwrap(),
+            "parquet",
+        )]);
 
-        cmd.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("load", &attrs)
+            .unwrap();
 
-        let (count, total_rows, _) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, _) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 1);
         assert_eq!(total_rows, 3);
 
-        let (rows, _, columns) = get_file_outputs(&context, &prefix, "metrics").await;
+        let (rows, _, columns) = get_file_outputs(&context, "exec", "load", "metrics").await;
         assert_eq!(rows, 3);
         assert!(columns.contains(&"id".to_string()));
         assert!(columns.contains(&"category".to_string()));
@@ -438,39 +421,43 @@ mod tests {
     #[tokio::test]
     async fn test_load_multiple_files() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = FileCommand {
-            files: vec![
-                make_file_spec(
-                    "users",
-                    fixtures_dir().join("users.csv").to_str().unwrap(),
-                    "csv",
-                ),
-                make_file_spec(
-                    "products",
-                    fixtures_dir().join("products.csv").to_str().unwrap(),
-                    "csv",
-                ),
-            ],
-        };
+        let attrs = file_attrs(vec![
+            make_file_spec(
+                "users",
+                fixtures_dir().join("users.csv").to_str().unwrap(),
+                "csv",
+            ),
+            make_file_spec(
+                "products",
+                fixtures_dir().join("products.csv").to_str().unwrap(),
+                "csv",
+            ),
+        ]);
 
-        cmd.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("load", &attrs)
+            .unwrap();
 
-        let (count, total_rows, total_size) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, total_size) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 2);
         assert_eq!(total_rows, 6); // 3 + 3
         assert!(total_size > 0);
 
         // Check users file outputs
-        let (users_rows, _, users_columns) = get_file_outputs(&context, &prefix, "users").await;
+        let (users_rows, _, users_columns) =
+            get_file_outputs(&context, "exec", "load", "users").await;
         assert_eq!(users_rows, 3);
         assert_eq!(users_columns, vec!["id", "name", "email", "age"]);
 
         // Check products file outputs
         let (products_rows, _, products_columns) =
-            get_file_outputs(&context, &prefix, "products").await;
+            get_file_outputs(&context, "exec", "load", "products").await;
         assert_eq!(products_rows, 3);
         assert_eq!(products_columns, vec!["sku", "name", "price", "quantity"]);
     }
@@ -478,32 +465,35 @@ mod tests {
     #[tokio::test]
     async fn test_load_mixed_formats() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = FileCommand {
-            files: vec![
-                make_file_spec(
-                    "users",
-                    fixtures_dir().join("users.csv").to_str().unwrap(),
-                    "csv",
-                ),
-                make_file_spec(
-                    "events",
-                    fixtures_dir().join("events.json").to_str().unwrap(),
-                    "json",
-                ),
-                make_file_spec(
-                    "metrics",
-                    fixtures_dir().join("metrics.parquet").to_str().unwrap(),
-                    "parquet",
-                ),
-            ],
-        };
+        let attrs = file_attrs(vec![
+            make_file_spec(
+                "users",
+                fixtures_dir().join("users.csv").to_str().unwrap(),
+                "csv",
+            ),
+            make_file_spec(
+                "events",
+                fixtures_dir().join("events.json").to_str().unwrap(),
+                "json",
+            ),
+            make_file_spec(
+                "metrics",
+                fixtures_dir().join("metrics.parquet").to_str().unwrap(),
+                "parquet",
+            ),
+        ]);
 
-        cmd.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("load", &attrs)
+            .unwrap();
 
-        let (count, total_rows, _) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, _) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 3);
         assert_eq!(total_rows, 9); // 3 + 3 + 3
     }
@@ -511,14 +501,19 @@ mod tests {
     #[tokio::test]
     async fn test_empty_files_array() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = FileCommand { files: vec![] };
+        let attrs = file_attrs(vec![]);
 
-        cmd.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("load", &attrs)
+            .unwrap();
 
-        let (count, total_rows, total_size) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, total_size) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 0);
         assert_eq!(total_rows, 0);
         assert_eq!(total_size, 0);
@@ -527,7 +522,7 @@ mod tests {
     #[tokio::test]
     async fn test_file_not_found_error() {
         init_tracing();
-        let context = ExecutionContext::new(None);
+        let context = ExecutionContext::new();
         let prefix = StorePath::from_segments(["ns", "cmd"]);
 
         let cmd = FileCommand {
@@ -543,7 +538,7 @@ mod tests {
     #[tokio::test]
     async fn test_directory_error() {
         init_tracing();
-        let context = ExecutionContext::new(None);
+        let context = ExecutionContext::new();
         let prefix = StorePath::from_segments(["ns", "cmd"]);
 
         let cmd = FileCommand {
@@ -563,7 +558,7 @@ mod tests {
     #[tokio::test]
     async fn test_unsupported_format_error() {
         init_tracing();
-        let context = ExecutionContext::new(None);
+        let context = ExecutionContext::new();
         let prefix = StorePath::from_segments(["ns", "cmd"]);
 
         let cmd = FileCommand {
@@ -583,35 +578,22 @@ mod tests {
     #[tokio::test]
     async fn test_from_attributes() {
         init_tracing();
-        use tera::Map;
 
-        let mut file1 = Map::new();
-        file1.insert("name".to_string(), ScalarValue::String("users".to_string()));
-        file1.insert(
-            "file".to_string(),
-            ScalarValue::String("/path/to/users.csv".to_string()),
-        );
-        file1.insert("format".to_string(), ScalarValue::String("csv".to_string()));
+        let file1 = ObjectBuilder::new()
+            .insert("name", "users")
+            .insert("file", "/path/to/users.csv")
+            .insert("format", "csv")
+            .build_scalar();
 
-        let mut file2 = Map::new();
-        file2.insert(
-            "name".to_string(),
-            ScalarValue::String("events".to_string()),
-        );
-        file2.insert(
-            "file".to_string(),
-            ScalarValue::String("/path/to/events.json".to_string()),
-        );
-        file2.insert(
-            "format".to_string(),
-            ScalarValue::String("json".to_string()),
-        );
+        let file2 = ObjectBuilder::new()
+            .insert("name", "events")
+            .insert("file", "/path/to/events.json")
+            .insert("format", "json")
+            .build_scalar();
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "files".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(file1), ScalarValue::Object(file2)]),
-        );
+        let attrs = ObjectBuilder::new()
+            .insert("files", ScalarValue::Array(vec![file1, file2]))
+            .build_hashmap();
 
         let cmd = FileCommand::from_attributes(&attrs).unwrap();
 
@@ -627,36 +609,29 @@ mod tests {
     #[tokio::test]
     async fn test_factory_builds_and_executes() {
         init_tracing();
-        use tera::Map;
 
-        let mut file = Map::new();
-        file.insert("name".to_string(), ScalarValue::String("users".to_string()));
-        file.insert(
-            "file".to_string(),
-            ScalarValue::String(
-                fixtures_dir()
-                    .join("users.csv")
-                    .to_string_lossy()
-                    .to_string(),
-            ),
-        );
-        file.insert("format".to_string(), ScalarValue::String("csv".to_string()));
+        let attrs = file_attrs(vec![make_file_spec(
+            "users",
+            fixtures_dir().join("users.csv").to_str().unwrap(),
+            "csv",
+        )]);
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "files".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(file)]),
-        );
-
+        // Test that factory() returns a valid builder
         let factory = FileCommand::factory();
-        let executable = factory(&attrs).expect("Factory should succeed with valid attributes");
+        let _executable = factory(&attrs).expect("Factory should succeed with valid attributes");
 
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "factory_test"]);
+        // Now use Pipeline::execute() pattern to actually run
+        let mut pipeline = Pipeline::new();
 
-        executable.execute(&context, &prefix).await.unwrap();
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<FileCommand>("factory_test", &attrs)
+            .unwrap();
 
-        let (count, total_rows, _) = get_summary(&context, &prefix).await;
+        let context = pipeline.execute().await.unwrap();
+
+        let (count, total_rows, _) = get_summary(&context, "exec", "factory_test").await;
         assert_eq!(count, 1);
         assert_eq!(total_rows, 3);
     }
@@ -712,21 +687,16 @@ mod tests {
     #[tokio::test]
     async fn test_factory_rejects_invalid_file_object_missing_name() {
         init_tracing();
-        use tera::Map;
 
-        let mut file = Map::new();
         // Missing 'name' field
-        file.insert(
-            "file".to_string(),
-            ScalarValue::String("/path/to/file.csv".to_string()),
-        );
-        file.insert("format".to_string(), ScalarValue::String("csv".to_string()));
+        let file = ObjectBuilder::new()
+            .insert("file", "/path/to/file.csv")
+            .insert("format", "csv")
+            .build_scalar();
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "files".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(file)]),
-        );
+        let attrs = ObjectBuilder::new()
+            .insert("files", ScalarValue::Array(vec![file]))
+            .build_hashmap();
 
         let factory = FileCommand::factory();
         let result = factory(&attrs);
@@ -747,18 +717,16 @@ mod tests {
     #[tokio::test]
     async fn test_factory_rejects_invalid_file_object_missing_file() {
         init_tracing();
-        use tera::Map;
 
-        let mut file = Map::new();
-        file.insert("name".to_string(), ScalarValue::String("users".to_string()));
         // Missing 'file' field
-        file.insert("format".to_string(), ScalarValue::String("csv".to_string()));
+        let file = ObjectBuilder::new()
+            .insert("name", "users")
+            .insert("format", "csv")
+            .build_scalar();
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "files".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(file)]),
-        );
+        let attrs = ObjectBuilder::new()
+            .insert("files", ScalarValue::Array(vec![file]))
+            .build_hashmap();
 
         let factory = FileCommand::factory();
         let result = factory(&attrs);
@@ -779,21 +747,16 @@ mod tests {
     #[tokio::test]
     async fn test_factory_rejects_invalid_file_object_missing_format() {
         init_tracing();
-        use tera::Map;
 
-        let mut file = Map::new();
-        file.insert("name".to_string(), ScalarValue::String("users".to_string()));
-        file.insert(
-            "file".to_string(),
-            ScalarValue::String("/path/to/file.csv".to_string()),
-        );
         // Missing 'format' field
+        let file = ObjectBuilder::new()
+            .insert("name", "users")
+            .insert("file", "/path/to/file.csv")
+            .build_scalar();
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "files".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(file)]),
-        );
+        let attrs = ObjectBuilder::new()
+            .insert("files", ScalarValue::Array(vec![file]))
+            .build_hashmap();
 
         let factory = FileCommand::factory();
         let result = factory(&attrs);

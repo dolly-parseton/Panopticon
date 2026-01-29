@@ -1,6 +1,4 @@
-use crate::execution::namespace::{Namespace, NamespaceType};
-use crate::prelude::*;
-use std::collections::{HashMap, HashSet, VecDeque};
+use crate::imports::*;
 
 pub struct ExecutionGroup<'a> {
     pub namespace: &'a Namespace,
@@ -24,7 +22,7 @@ impl<'a> ExecutionPlan<'a> {
             "Computing execution plan"
         );
 
-        let namespace_order = compute_namespace_order(namespaces)?;
+        let namespace_order = compute_namespace_order(namespaces, commands)?;
 
         tracing::debug!(?namespace_order, "Computed namespace execution order");
 
@@ -50,7 +48,7 @@ impl<'a> ExecutionPlan<'a> {
             return Ok(vec![]);
         }
 
-        let order = compute_command_order(&ns_commands, &namespace.name)?;
+        let order = compute_command_order(&ns_commands, namespace.name())?;
 
         Ok(order.into_iter().map(|i| ns_commands[i]).collect())
     }
@@ -72,7 +70,7 @@ impl<'a> Iterator for ExecutionPlan<'a> {
         match self.get_ordered_commands_for_namespace(ns_idx) {
             Ok(commands) => {
                 tracing::debug!(
-                    namespace = namespace.name.as_str(),
+                    namespace = namespace.name(),
                     command_count = commands.len(),
                     "Yielding execution group"
                 );
@@ -87,7 +85,10 @@ impl<'a> Iterator for ExecutionPlan<'a> {
     }
 }
 
-fn compute_namespace_order(namespaces: &[Namespace]) -> Result<Vec<usize>> {
+fn compute_namespace_order(
+    namespaces: &[Namespace],
+    commands: &[CommandSpec],
+) -> Result<Vec<usize>> {
     if namespaces.is_empty() {
         return Ok(vec![]);
     }
@@ -95,31 +96,54 @@ fn compute_namespace_order(namespaces: &[Namespace]) -> Result<Vec<usize>> {
     let name_to_idx: HashMap<&str, usize> = namespaces
         .iter()
         .enumerate()
-        .map(|(i, ns)| (ns.name.as_str(), i))
+        .map(|(i, ns)| (ns.name(), i))
         .collect();
 
     let mut graph: HashMap<usize, HashSet<usize>> = HashMap::new();
 
-    for (idx, namespace) in namespaces.iter().enumerate() {
-        let mut deps = HashSet::new();
+    // Initialize all namespaces in the graph
+    for idx in 0..namespaces.len() {
+        graph.insert(idx, HashSet::new());
+    }
 
-        if let NamespaceType::Iterative { store_path, .. } = &namespace.ty {
-            if let Some(namespace) = store_path.namespace()
-                && let Some(&source_idx) = name_to_idx.get(namespace.as_str())
+    // Add dependencies from iterative namespaces
+    for (idx, namespace) in namespaces.iter().enumerate() {
+        if let ExecutionMode::Iterative { store_path, .. } = &namespace.ty() {
+            if let Some(ns_name) = store_path.namespace()
+                && let Some(&source_idx) = name_to_idx.get(ns_name.as_str())
             {
                 if source_idx != idx {
-                    deps.insert(source_idx);
+                    graph.get_mut(&idx).unwrap().insert(source_idx);
                 }
             } else {
                 tracing::debug!(
-                    namespace = namespace.name.as_str(),
+                    namespace = namespace.name(),
                     store_path = store_path.to_dotted(),
                     "Source namespace not found in namespace list, assuming external input"
                 );
             }
         }
+    }
 
-        graph.insert(idx, deps);
+    // Add dependencies from command dependencies (cross-namespace references)
+    for command in commands {
+        let command_ns_idx = command.namespace_index;
+
+        for dep_path in &command.dependencies {
+            if let Some(dep_ns_name) = dep_path.namespace()
+                && let Some(&dep_ns_idx) = name_to_idx.get(dep_ns_name.as_str())
+                && dep_ns_idx != command_ns_idx
+            {
+                graph.get_mut(&command_ns_idx).unwrap().insert(dep_ns_idx);
+                tracing::trace!(
+                    command = %command.name,
+                    command_namespace_idx = command_ns_idx,
+                    depends_on_namespace_idx = dep_ns_idx,
+                    dependency_path = %dep_path,
+                    "Found cross-namespace dependency"
+                );
+            }
+        }
     }
 
     topological_sort(&graph, namespaces.len())
@@ -139,10 +163,9 @@ fn compute_command_order(commands: &[&CommandSpec], namespace: &str) -> Result<V
 
     let mut graph: HashMap<usize, HashSet<usize>> = HashMap::new();
     for (idx, command) in commands.iter().enumerate() {
-        let path_deps = extract_attribute_dependencies(&command.attributes);
         let mut cmd_deps = HashSet::new();
 
-        for dep_path in &path_deps {
+        for dep_path in &command.dependencies {
             for (cmd_prefix, &cmd_idx) in &prefix_to_idx {
                 if dep_path.starts_with(cmd_prefix) && cmd_idx != idx {
                     cmd_deps.insert(cmd_idx);
@@ -161,35 +184,6 @@ fn compute_command_order(commands: &[&CommandSpec], namespace: &str) -> Result<V
 
     topological_sort(&graph, commands.len())
         .map_err(|_| anyhow::anyhow!("Circular dependency detected in command execution order"))
-}
-
-fn extract_attribute_dependencies(attrs: &Attributes) -> HashSet<StorePath> {
-    let mut dependencies = HashSet::new();
-
-    for (_, value) in attrs.iter() {
-        extract_value_dependencies(value, &mut dependencies);
-    }
-
-    dependencies
-}
-
-fn extract_value_dependencies(value: &ScalarValue, deps: &mut HashSet<StorePath>) {
-    match value {
-        ScalarValue::String(s) => {
-            extract_variables(s, deps);
-        }
-        ScalarValue::Array(arr) => {
-            for item in arr {
-                extract_value_dependencies(item, deps);
-            }
-        }
-        ScalarValue::Object(obj) => {
-            for (_, v) in obj {
-                extract_value_dependencies(v, deps);
-            }
-        }
-        _ => {}
-    }
 }
 
 fn topological_sort(

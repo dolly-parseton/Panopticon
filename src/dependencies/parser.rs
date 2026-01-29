@@ -1,20 +1,20 @@
-use crate::prelude::*;
+use crate::imports::*;
+
 use pest::Parser;
 use pest::iterators::Pair;
 use pest_derive::Parser;
-use std::collections::HashSet;
 
 #[derive(Parser)]
 #[grammar = "tera.pest"] // relative to src directory
 struct TeraParser;
 
 #[tracing::instrument(
-    name = "extract_variables",
+    name = "parse_template_dependencies",
     level = "debug",
     skip_all,
     fields(template_hash, initial_count, final_count)
 )]
-pub fn extract_variables(template: &str, dependencies: &mut HashSet<StorePath>) {
+pub fn parse_template_dependencies(template: &str, dependencies: &mut HashSet<StorePath>) {
     if tracing::enabled!(tracing::Level::DEBUG) {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -46,9 +46,11 @@ fn extract_identifiers_recursive<'a>(
     }
 }
 
+// TODO - Expand test coverage
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::imports::*;
 
     #[test]
     fn test_extract_context_dependencies() {
@@ -61,7 +63,7 @@ mod tests {
         "#;
 
         let mut vars = HashSet::new();
-        extract_variables(template, &mut vars);
+        parse_template_dependencies(template, &mut vars);
         println!("Extracted variables: {:?}", vars);
         let expected_vars: HashSet<StorePath> = [
             StorePath::from_dotted("name"),

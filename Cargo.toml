@@ -1,5 +1,5 @@
 [package]
-name = "panopticon"
+name = "panopticon-core"
 version = "0.1.0"
 edition = "2024"
 
@@ -8,12 +8,27 @@ anyhow = "1.0.100"
 async-trait = "0.1.89"
 pest = "2.8.5"
 pest_derive = "2.8.5"
-polars = { version = "0.52.0", features = ["sql", "parquet", "polars-io", "json"] }
+polars = { version = "0.52.0", features = [
+    "sql",
+    "lazy",
+    "parquet",
+    "polars-io",
+    "json",
+] }
 serde = { version = "1.0.228", features = ["derive"] }
 tera = "1.20.1"
-tokio = { version = "1.49.0", features = ["macros", "rt", "rt-multi-thread", "sync", "fs"] }
+tokio = { version = "1.49.0", features = [
+    "macros",
+    "rt",
+    "rt-multi-thread",
+    "sync",
+    "fs",
+] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3"
 
 [build-dependencies]
 ureq = "2.10"

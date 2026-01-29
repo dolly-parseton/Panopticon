@@ -1,0 +1,14 @@
+{% extends "base.tera" %}
+
+{% block title %}{{ inputs.page_title }} - {{ inputs.site_name }}{% endblock %}
+
+{% block header %}
+{% include "header.tera" %}
+{% endblock %}
+
+{% block content %}
+<article>
+    <h2>{{ inputs.page_title }}</h2>
+    <p>{{ inputs.page_content }}</p>
+</article>
+{% endblock %}

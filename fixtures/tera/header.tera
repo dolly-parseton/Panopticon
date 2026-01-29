@@ -1,0 +1,8 @@
+<header>
+    <h1>{{ inputs.site_name }}</h1>
+    <nav>
+        {% for item in inputs.nav_items %}
+        <a href="{{ item.url }}">{{ item.label }}</a>
+        {% endfor %}
+    </nav>
+</header>

@@ -1,5 +1,4 @@
-use crate::prelude::*;
-use std::sync::LazyLock;
+use crate::imports::*;
 
 static CONDITIONCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> =
     LazyLock::new(|| {
@@ -13,18 +12,21 @@ static CONDITIONCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> =
                             ty: TypeDef::Scalar(ScalarType::String),
                             required: true,
                             hint: Some("Tera expression to evaluate as condition"),
+                            reference_kind: ReferenceKind::RuntimeTeraTemplate,
                         },
                         FieldSpec {
                             name: "then",
                             ty: TypeDef::Scalar(ScalarType::String),
                             required: true,
                             hint: Some("Value if condition is true (supports Tera substitution)"),
+                            reference_kind: ReferenceKind::StaticTeraTemplate,
                         },
                     ],
                 })),
                 required: true,
                 hint: Some("Array of {if, then} objects evaluated in order"),
                 default_value: None,
+                reference_kind: ReferenceKind::Unsupported,
             },
             AttributeSpec {
                 name: "default",
@@ -32,6 +34,7 @@ static CONDITIONCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> =
                 required: false,
                 hint: Some("Default value if no branch matches (supports Tera substitution)"),
                 default_value: None,
+                reference_kind: ReferenceKind::StaticTeraTemplate,
             },
         ]
     });
@@ -73,6 +76,8 @@ impl Executable for ConditionCommand {
             "Executing ConditionCommand"
         );
 
+        let out = InsertBatch::new(context, output_prefix);
+
         // Evaluate branches in order
         for (index, branch) in self.branches.iter().enumerate() {
             // Evaluate the condition
@@ -84,27 +89,9 @@ impl Executable for ConditionCommand {
                 // Condition matched - substitute and return the then_value
                 let result = context.substitute(&branch.then_value).await?;
 
-                context
-                    .scalar()
-                    .insert(
-                        &output_prefix.with_segment("result"),
-                        ScalarValue::String(result),
-                    )
-                    .await?;
-                context
-                    .scalar()
-                    .insert(
-                        &output_prefix.with_segment("matched"),
-                        ScalarValue::Bool(true),
-                    )
-                    .await?;
-                context
-                    .scalar()
-                    .insert(
-                        &output_prefix.with_segment("branch_index"),
-                        ScalarValue::Number((index as i64).into()),
-                    )
-                    .await?;
+                out.string("result", result).await?;
+                out.bool("matched", true).await?;
+                out.i64("branch_index", index as i64).await?;
 
                 return Ok(());
             }
@@ -116,27 +103,9 @@ impl Executable for ConditionCommand {
             None => String::new(),
         };
 
-        context
-            .scalar()
-            .insert(
-                &output_prefix.with_segment("result"),
-                ScalarValue::String(result),
-            )
-            .await?;
-        context
-            .scalar()
-            .insert(
-                &output_prefix.with_segment("matched"),
-                ScalarValue::Bool(false),
-            )
-            .await?;
-        context
-            .scalar()
-            .insert(
-                &output_prefix.with_segment("branch_index"),
-                ScalarValue::Number((-1_i64).into()),
-            )
-            .await?;
+        out.string("result", result).await?;
+        out.bool("matched", false).await?;
+        out.i64("branch_index", -1).await?;
 
         Ok(())
     }
@@ -146,7 +115,7 @@ impl Descriptor for ConditionCommand {
     fn command_type() -> &'static str {
         "ConditionCommand"
     }
-    fn available_attributes() -> &'static [AttributeSpec<&'static str>] {
+    fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &CONDITIONCOMMAND_ATTRIBUTES
     }
     fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
@@ -156,34 +125,20 @@ impl Descriptor for ConditionCommand {
 
 impl FromAttributes for ConditionCommand {
     fn from_attributes(attrs: &Attributes) -> Result<Self> {
-        // Parse branches array
-        let branches_value = attrs
-            .get("branches")
-            .context("Missing required attribute 'branches'")?;
-
-        let branches_array = branches_value
-            .as_array()
-            .context("Attribute 'branches' must be an array")?;
+        let branches_array = attrs
+            .get_required("branches")?
+            .as_array_or_err("branches")?;
 
         let mut branches = Vec::with_capacity(branches_array.len());
         for (i, branch_value) in branches_array.iter().enumerate() {
-            let branch_obj = branch_value
-                .as_object()
-                .context(format!("branches[{}] must be an object", i))?;
+            let branch_obj = branch_value.as_object_or_err(&format!("branches[{}]", i))?;
 
             let condition = branch_obj
-                .get("if")
-                .context(format!("branches[{}] missing 'if' field", i))?
-                .as_str()
-                .context(format!("branches[{}].if must be a string", i))?
-                .to_string();
-
+                .get_required_string("if")
+                .context(format!("branches[{}]", i))?;
             let then_value = branch_obj
-                .get("then")
-                .context(format!("branches[{}] missing 'then' field", i))?
-                .as_str()
-                .context(format!("branches[{}].then must be a string", i))?
-                .to_string();
+                .get_required_string("then")
+                .context(format!("branches[{}]", i))?;
 
             branches.push(Branch {
                 condition,
@@ -191,11 +146,7 @@ impl FromAttributes for ConditionCommand {
             });
         }
 
-        // Parse optional default
-        let default = attrs
-            .get("default")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        let default = attrs.get_optional_string("default");
 
         Ok(ConditionCommand { branches, default })
     }
@@ -204,7 +155,7 @@ impl FromAttributes for ConditionCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use crate::imports::*;
 
     fn make_branch(condition: &str, then_value: &str) -> Branch {
         Branch {
@@ -213,7 +164,32 @@ mod tests {
         }
     }
 
-    async fn get_result(context: &ExecutionContext, prefix: &StorePath) -> (String, bool, i64) {
+    /// Helper to build condition command attributes
+    fn condition_attrs(branches: Vec<Branch>, default: Option<&str>) -> Attributes {
+        let branch_values: Vec<ScalarValue> = branches
+            .into_iter()
+            .map(|b| {
+                ObjectBuilder::new()
+                    .insert("if", b.condition)
+                    .insert("then", b.then_value)
+                    .build_scalar()
+            })
+            .collect();
+
+        let mut builder =
+            ObjectBuilder::new().insert("branches", ScalarValue::Array(branch_values));
+        if let Some(d) = default {
+            builder = builder.insert("default", d);
+        }
+        builder.build_hashmap()
+    }
+
+    async fn get_result(
+        context: &ExecutionContext,
+        namespace: &str,
+        command: &str,
+    ) -> (String, bool, i64) {
+        let prefix = StorePath::from_segments([namespace, command]);
         let result = context
             .scalar()
             .get(&prefix.with_segment("result"))
@@ -243,24 +219,32 @@ mod tests {
     #[tokio::test]
     async fn test_first_branch_matches() {
         init_tracing();
-        let mut inputs = HashMap::new();
-        inputs.insert(
-            "status".to_string(),
-            ScalarValue::String("active".to_string()),
+        let mut pipeline = Pipeline::new();
+
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("status", ScalarValue::String("active".to_string()))
+                .build()
+                .unwrap(),
         );
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
 
-        let cmd = ConditionCommand {
-            branches: vec![
-                make_branch("status == 'active'", "User is active"),
-                make_branch("status == 'pending'", "User is pending"),
+        let attrs = condition_attrs(
+            vec![
+                make_branch("inputs.status == 'active'", "User is active"),
+                make_branch("inputs.status == 'pending'", "User is pending"),
             ],
-            default: Some("Unknown".to_string()),
-        };
+            Some("Unknown"),
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, index) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "User is active");
         assert!(matched);
@@ -270,24 +254,32 @@ mod tests {
     #[tokio::test]
     async fn test_second_branch_matches() {
         init_tracing();
-        let mut inputs = HashMap::new();
-        inputs.insert(
-            "status".to_string(),
-            ScalarValue::String("pending".to_string()),
+        let mut pipeline = Pipeline::new();
+
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("status", ScalarValue::String("pending".to_string()))
+                .build()
+                .unwrap(),
         );
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
 
-        let cmd = ConditionCommand {
-            branches: vec![
-                make_branch("status == 'active'", "User is active"),
-                make_branch("status == 'pending'", "User is pending"),
+        let attrs = condition_attrs(
+            vec![
+                make_branch("inputs.status == 'active'", "User is active"),
+                make_branch("inputs.status == 'pending'", "User is pending"),
             ],
-            default: Some("Unknown".to_string()),
-        };
+            Some("Unknown"),
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, index) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "User is pending");
         assert!(matched);
@@ -297,24 +289,32 @@ mod tests {
     #[tokio::test]
     async fn test_default_when_no_match() {
         init_tracing();
-        let mut inputs = HashMap::new();
-        inputs.insert(
-            "status".to_string(),
-            ScalarValue::String("unknown".to_string()),
+        let mut pipeline = Pipeline::new();
+
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("status", ScalarValue::String("unknown".to_string()))
+                .build()
+                .unwrap(),
         );
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
 
-        let cmd = ConditionCommand {
-            branches: vec![
-                make_branch("status == 'active'", "User is active"),
-                make_branch("status == 'pending'", "User is pending"),
+        let attrs = condition_attrs(
+            vec![
+                make_branch("inputs.status == 'active'", "User is active"),
+                make_branch("inputs.status == 'pending'", "User is pending"),
             ],
-            default: Some("Unknown status".to_string()),
-        };
+            Some("Unknown status"),
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, index) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "Unknown status");
         assert!(!matched);
@@ -324,21 +324,29 @@ mod tests {
     #[tokio::test]
     async fn test_no_default_no_match_returns_empty() {
         init_tracing();
-        let mut inputs = HashMap::new();
-        inputs.insert(
-            "status".to_string(),
-            ScalarValue::String("unknown".to_string()),
+        let mut pipeline = Pipeline::new();
+
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("status", ScalarValue::String("unknown".to_string()))
+                .build()
+                .unwrap(),
         );
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
 
-        let cmd = ConditionCommand {
-            branches: vec![make_branch("status == 'active'", "User is active")],
-            default: None,
-        };
+        let attrs = condition_attrs(
+            vec![make_branch("inputs.status == 'active'", "User is active")],
+            None,
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, index) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "");
         assert!(!matched);
@@ -348,22 +356,33 @@ mod tests {
     #[tokio::test]
     async fn test_tera_substitution_in_then_value() {
         init_tracing();
-        let mut inputs = HashMap::new();
-        inputs.insert("name".to_string(), ScalarValue::String("Alice".to_string()));
-        inputs.insert("count".to_string(), ScalarValue::Number(42.into()));
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = ConditionCommand {
-            branches: vec![make_branch(
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("name", ScalarValue::String("Alice".to_string()))
+                .insert("count", ScalarValue::Number(42.into()))
+                .build()
+                .unwrap(),
+        );
+
+        let attrs = condition_attrs(
+            vec![make_branch(
                 "true",
-                "Hello {{ name }}, you have {{ count }} items",
+                "Hello {{ inputs.name }}, you have {{ inputs.count }} items",
             )],
-            default: None,
-        };
+            None,
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, _) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, _) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "Hello Alice, you have 42 items");
         assert!(matched);
@@ -372,21 +391,29 @@ mod tests {
     #[tokio::test]
     async fn test_tera_substitution_in_default() {
         init_tracing();
-        let mut inputs = HashMap::new();
-        inputs.insert(
-            "status".to_string(),
-            ScalarValue::String("weird".to_string()),
+        let mut pipeline = Pipeline::new();
+
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("status", ScalarValue::String("weird".to_string()))
+                .build()
+                .unwrap(),
         );
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
 
-        let cmd = ConditionCommand {
-            branches: vec![make_branch("status == 'active'", "Active")],
-            default: Some("Unexpected status: {{ status }}".to_string()),
-        };
+        let attrs = condition_attrs(
+            vec![make_branch("inputs.status == 'active'", "Active")],
+            Some("Unexpected status: {{ inputs.status }}"),
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, _) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, _) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "Unexpected status: weird");
         assert!(!matched);
@@ -394,22 +421,34 @@ mod tests {
 
     #[tokio::test]
     async fn test_numeric_comparison() {
-        let mut inputs = HashMap::new();
-        inputs.insert("score".to_string(), ScalarValue::Number(85.into()));
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        init_tracing();
+        let mut pipeline = Pipeline::new();
 
-        let cmd = ConditionCommand {
-            branches: vec![
-                make_branch("score >= 90", "A"),
-                make_branch("score >= 80", "B"),
-                make_branch("score >= 70", "C"),
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("score", ScalarValue::Number(85.into()))
+                .build()
+                .unwrap(),
+        );
+
+        let attrs = condition_attrs(
+            vec![
+                make_branch("inputs.score >= 90", "A"),
+                make_branch("inputs.score >= 80", "B"),
+                make_branch("inputs.score >= 70", "C"),
             ],
-            default: Some("F".to_string()),
-        };
+            Some("F"),
+        );
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, index) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "B");
         assert!(matched);
@@ -419,16 +458,18 @@ mod tests {
     #[tokio::test]
     async fn test_empty_branches_uses_default() {
         init_tracing();
-        let context = ExecutionContext::new(None);
-        let prefix = StorePath::from_segments(["ns", "cmd"]);
+        let mut pipeline = Pipeline::new();
 
-        let cmd = ConditionCommand {
-            branches: vec![],
-            default: Some("No branches defined".to_string()),
-        };
+        let attrs = condition_attrs(vec![], Some("No branches defined"));
 
-        cmd.execute(&context, &prefix).await.unwrap();
-        let (result, matched, index) = get_result(&context, &prefix).await;
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "No branches defined");
         assert!(!matched);
@@ -438,29 +479,22 @@ mod tests {
     #[tokio::test]
     async fn test_from_attributes() {
         init_tracing();
-        use tera::Map;
 
-        // Build branch objects manually
-        let mut branch1 = Map::new();
-        branch1.insert("if".to_string(), ScalarValue::String("x > 5".to_string()));
-        branch1.insert("then".to_string(), ScalarValue::String("big".to_string()));
+        // Build branch objects using ObjectBuilder
+        let branch1 = ObjectBuilder::new()
+            .insert("if", "x > 5")
+            .insert("then", "big")
+            .build_scalar();
 
-        let mut branch2 = Map::new();
-        branch2.insert("if".to_string(), ScalarValue::String("x <= 5".to_string()));
-        branch2.insert("then".to_string(), ScalarValue::String("small".to_string()));
+        let branch2 = ObjectBuilder::new()
+            .insert("if", "x <= 5")
+            .insert("then", "small")
+            .build_scalar();
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "branches".to_string(),
-            ScalarValue::Array(vec![
-                ScalarValue::Object(branch1),
-                ScalarValue::Object(branch2),
-            ]),
-        );
-        attrs.insert(
-            "default".to_string(),
-            ScalarValue::String("unknown".to_string()),
-        );
+        let attrs = ObjectBuilder::new()
+            .insert("branches", ScalarValue::Array(vec![branch1, branch2]))
+            .insert("default", "unknown")
+            .build_hashmap();
 
         let cmd = ConditionCommand::from_attributes(&attrs).unwrap();
 
@@ -475,41 +509,35 @@ mod tests {
     #[tokio::test]
     async fn test_factory_builds_and_executes() {
         init_tracing();
-        use tera::Map;
 
-        // Build valid attributes
-        let mut branch = Map::new();
-        branch.insert(
-            "if".to_string(),
-            ScalarValue::String("value > 10".to_string()),
-        );
-        branch.insert(
-            "then".to_string(),
-            ScalarValue::String("big number".to_string()),
+        let attrs = condition_attrs(
+            vec![make_branch("inputs.value > 10", "big number")],
+            Some("small number"),
         );
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "branches".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(branch)]),
-        );
-        attrs.insert(
-            "default".to_string(),
-            ScalarValue::String("small number".to_string()),
-        );
-
-        // Use factory to build the command
+        // Test that factory() returns a valid builder
         let factory = ConditionCommand::factory();
-        let executable = factory(&attrs).expect("Factory should succeed with valid attributes");
+        let _executable = factory(&attrs).expect("Factory should succeed with valid attributes");
 
-        // Execute the command
-        let mut inputs = HashMap::new();
-        inputs.insert("value".to_string(), ScalarValue::Number(25.into()));
-        let context = ExecutionContext::new(Some(&inputs));
-        let prefix = StorePath::from_segments(["ns", "factory_test"]);
+        // Now use Pipeline::execute() pattern to actually run
+        let mut pipeline = Pipeline::new();
 
-        executable.execute(&context, &prefix).await.unwrap();
-        let (result, matched, _) = get_result(&context, &prefix).await;
+        pipeline.add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("value", ScalarValue::Number(25.into()))
+                .build()
+                .unwrap(),
+        );
+
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .unwrap()
+            .add_command::<ConditionCommand>("factory_test", &attrs)
+            .unwrap();
+
+        let context = pipeline.execute().await.unwrap();
+        let (result, matched, _) = get_result(&context, "exec", "factory_test").await;
 
         assert_eq!(result, "big number");
         assert!(matched);
@@ -568,18 +596,16 @@ mod tests {
     #[tokio::test]
     async fn test_factory_rejects_invalid_branch_object() {
         init_tracing();
-        use tera::Map;
 
         // Branch missing required 'then' field
-        let mut branch = Map::new();
-        branch.insert("if".to_string(), ScalarValue::String("true".to_string()));
-        // Missing 'then' field
+        let branch = ObjectBuilder::new()
+            .insert("if", "true")
+            // Missing 'then' field
+            .build_scalar();
 
-        let mut attrs = Attributes::new();
-        attrs.insert(
-            "branches".to_string(),
-            ScalarValue::Array(vec![ScalarValue::Object(branch)]),
-        );
+        let attrs = ObjectBuilder::new()
+            .insert("branches", ScalarValue::Array(vec![branch]))
+            .build_hashmap();
 
         let factory = ConditionCommand::factory();
         let result = factory(&attrs);
