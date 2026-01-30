@@ -1,100 +1,73 @@
 use crate::imports::*;
 
-static TEMPLATECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = LazyLock::new(
-    || {
-        vec![
-            AttributeSpec {
-                name: "templates",
-                ty: TypeDef::ArrayOf(Box::new(TypeDef::ObjectOf {
-                    fields: vec![
-                        FieldSpec {
-                            name: "name",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: true,
-                            hint: Some("Name to register the template under"),
-                            reference_kind: ReferenceKind::Unsupported,
-                        },
-                        FieldSpec {
-                            name: "content",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: false,
-                            hint: Some("Raw template content (mutually exclusive with 'file')"),
-                            reference_kind: ReferenceKind::StaticTeraTemplate,
-                        },
-                        FieldSpec {
-                            name: "file",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: false,
-                            hint: Some(
-                                "Path to template file (mutually exclusive with 'content'). Dependencies within external files are not validated prior to execution",
-                            ),
-                            reference_kind: ReferenceKind::StaticTeraTemplate,
-                        },
-                    ],
-                })),
-                required: false,
-                hint: Some("Array of template definitions. Can be combined with 'template_glob'"),
-                default_value: None,
-                reference_kind: ReferenceKind::Unsupported,
-            },
-            AttributeSpec {
+static TEMPLATECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
+    LazyLock::new(|| {
+        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+            "templates",
+            false,
+            Some("Array of template definitions. Can be combined with 'template_glob'"),
+        );
+
+        let (fields, _) = fields.add_literal(
+            "name",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Name to register the template under"),
+        );
+        let fields = fields.add_template(
+            "content",
+            TypeDef::Scalar(ScalarType::String),
+            false,
+            Some("Raw template content (mutually exclusive with 'file')"),
+            ReferenceKind::StaticTeraTemplate,
+        );
+        let fields = fields.add_template(
+            "file",
+            TypeDef::Scalar(ScalarType::String),
+            false,
+            Some("Path to template file (mutually exclusive with 'content'). Dependencies within external files are not validated prior to execution"),
+            ReferenceKind::StaticTeraTemplate,
+        );
+
+        pending
+            .finalise_attribute(fields)
+            .attribute(AttributeSpec {
                 name: "template_glob",
                 ty: TypeDef::Scalar(ScalarType::String),
                 required: false,
-                hint: Some(
-                    "Glob pattern to load templates from disk (e.g., 'templates/**/*.tera'). Can be combined with 'templates' (supports Tera substitution). Dependencies within external files are not validated prior to execution",
-                ),
+                hint: Some("Glob pattern to load templates from disk (e.g., 'templates/**/*.tera'). Can be combined with 'templates' (supports Tera substitution). Dependencies within external files are not validated prior to execution"),
                 default_value: None,
                 reference_kind: ReferenceKind::StaticTeraTemplate,
-            },
-            AttributeSpec {
+            })
+            .attribute(AttributeSpec {
                 name: "render",
                 ty: TypeDef::Scalar(ScalarType::String),
                 required: true,
                 hint: Some("Name of the template to render (supports Tera substitution)"),
                 default_value: None,
                 reference_kind: ReferenceKind::StaticTeraTemplate,
-            },
-            AttributeSpec {
+            })
+            .attribute(AttributeSpec {
                 name: "output",
                 ty: TypeDef::Scalar(ScalarType::String),
                 required: true,
                 hint: Some("File path to write the rendered output (supports Tera substitution)"),
                 default_value: None,
                 reference_kind: ReferenceKind::StaticTeraTemplate,
-            },
-            AttributeSpec {
+            })
+            .attribute(AttributeSpec {
                 name: "capture",
                 ty: TypeDef::Scalar(ScalarType::Bool),
                 required: false,
                 hint: Some("If true, store the rendered content in the 'content' result"),
                 default_value: Some(ScalarValue::Bool(false)),
                 reference_kind: ReferenceKind::Unsupported,
-            },
-        ]
-    },
-);
-
-const TEMPLATECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    ResultSpec::Field {
-        name: "line_count",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("Number of lines in the rendered output"),
-        kind: ResultKind::Meta,
-    },
-    ResultSpec::Field {
-        name: "size",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("Size in bytes of the rendered output"),
-        kind: ResultKind::Meta,
-    },
-    ResultSpec::Field {
-        name: "content",
-        ty: TypeDef::Scalar(ScalarType::String),
-        hint: Some("The rendered content (only populated when 'capture' is true, otherwise empty)"),
-        kind: ResultKind::Meta,
-    },
-];
+            })
+            .fixed_result("line_count", TypeDef::Scalar(ScalarType::Number), Some("Number of lines in the rendered output"), ResultKind::Meta)
+            .fixed_result("size", TypeDef::Scalar(ScalarType::Number), Some("Size in bytes of the rendered output"), ResultKind::Meta)
+            .fixed_result("content", TypeDef::Scalar(ScalarType::String), Some("The rendered content (only populated when 'capture' is true, otherwise empty)"), ResultKind::Meta)
+            .build()
+    });
 
 #[derive(Debug)]
 enum TemplateSource {
@@ -222,10 +195,10 @@ impl Descriptor for TemplateCommand {
         "TemplateCommand"
     }
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
-        &TEMPLATECOMMAND_ATTRIBUTES
+        &TEMPLATECOMMAND_SPEC.0
     }
     fn command_results() -> &'static [ResultSpec<&'static str>] {
-        TEMPLATECOMMAND_OUTPUTS
+        &TEMPLATECOMMAND_SPEC.1
     }
 }
 

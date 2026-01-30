@@ -1,69 +1,43 @@
 use crate::imports::*;
 use polars::prelude::SerReader;
 
-static FILECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = LazyLock::new(|| {
-    vec![AttributeSpec {
-        name: "files",
-        ty: TypeDef::ArrayOf(Box::new(TypeDef::ObjectOf {
-            fields: vec![
-                FieldSpec {
-                    name: "name",
-                    ty: TypeDef::Scalar(ScalarType::String),
-                    required: true,
-                    hint: Some("Identifier for this file in the TabularStore"),
-                    reference_kind: ReferenceKind::Unsupported,
-                },
-                FieldSpec {
-                    name: "file",
-                    ty: TypeDef::Scalar(ScalarType::String),
-                    required: true,
-                    hint: Some("Path to the file to read (supports tera templates)"),
-                    reference_kind: ReferenceKind::StaticTeraTemplate,
-                },
-                FieldSpec {
-                    name: "format",
-                    ty: TypeDef::Scalar(ScalarType::String),
-                    required: true,
-                    hint: Some(
-                        "Format of the file: csv, json, or parquet (supports tera templates)",
-                    ),
-                    reference_kind: ReferenceKind::StaticTeraTemplate,
-                },
-            ],
-        })),
-        required: true,
-        hint: Some("Array of {name, file, format} objects to read"),
-        default_value: None,
-        reference_kind: ReferenceKind::Unsupported,
-    }]
-});
+static FILECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
+    LazyLock::new(|| {
+        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+            "files",
+            true,
+            Some("Array of {name, file, format} objects to read"),
+        );
 
-const FILECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    ResultSpec::Field {
-        name: "count",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("The number of files loaded."),
-        kind: ResultKind::Meta,
-    },
-    ResultSpec::Field {
-        name: "total_rows",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("The total number of rows across all loaded files."),
-        kind: ResultKind::Meta,
-    },
-    ResultSpec::Field {
-        name: "total_size",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("The total size in bytes across all loaded files."),
-        kind: ResultKind::Meta,
-    },
-    ResultSpec::DerivedFromSingleAttribute {
-        attribute: "files",
-        name_field: "name",
-        ty: TypeDef::Tabular,
-        kind: ResultKind::Data,
-    },
-];
+        let (fields, name_ref) = fields.add_literal(
+            "name",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Identifier for this file in the TabularStore"),
+        );
+        let fields = fields.add_template(
+            "file",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Path to the file to read (supports tera templates)"),
+            ReferenceKind::StaticTeraTemplate,
+        );
+        let fields = fields.add_template(
+            "format",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Format of the file: csv, json, or parquet (supports tera templates)"),
+            ReferenceKind::StaticTeraTemplate,
+        );
+
+        pending
+            .finalise_attribute(fields)
+            .fixed_result("count", TypeDef::Scalar(ScalarType::Number), Some("The number of files loaded."), ResultKind::Meta)
+            .fixed_result("total_rows", TypeDef::Scalar(ScalarType::Number), Some("The total number of rows across all loaded files."), ResultKind::Meta)
+            .fixed_result("total_size", TypeDef::Scalar(ScalarType::Number), Some("The total size in bytes across all loaded files."), ResultKind::Meta)
+            .derived_result("files", name_ref, Some(TypeDef::Tabular), ResultKind::Data)
+            .build()
+    });
 
 struct FileSpec {
     name: String,
@@ -182,10 +156,10 @@ impl Descriptor for FileCommand {
         "FileCommand"
     }
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
-        &FILECOMMAND_ATTRIBUTES
+        &FILECOMMAND_SPEC.0
     }
     fn command_results() -> &'static [ResultSpec<&'static str>] {
-        FILECOMMAND_OUTPUTS
+        &FILECOMMAND_SPEC.1
     }
 }
 

@@ -1,79 +1,43 @@
 use crate::imports::*;
 use polars::prelude::IntoLazy;
 
-static SQLCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = LazyLock::new(|| {
-    vec![
-        AttributeSpec {
-            name: "tables",
-            ty: TypeDef::ArrayOf(Box::new(TypeDef::ObjectOf {
-                fields: vec![
-                    FieldSpec {
-                        name: "name",
-                        ty: TypeDef::Scalar(ScalarType::String),
-                        required: true,
-                        hint: Some("Table name to use in SQL query"),
-                        reference_kind: ReferenceKind::Unsupported,
-                    },
-                    FieldSpec {
-                        name: "source",
-                        ty: TypeDef::Scalar(ScalarType::String),
-                        required: true,
-                        hint: Some("Path to tabular data in store (e.g., 'load.users.data')"),
-                        reference_kind: ReferenceKind::StorePath,
-                    },
-                ],
-            })),
-            required: true,
-            hint: Some("Array of {name, source} objects mapping table names to stored data"),
-            default_value: None,
-            reference_kind: ReferenceKind::Unsupported,
-        },
-        AttributeSpec {
-            name: "query",
-            ty: TypeDef::Scalar(ScalarType::String),
-            required: true,
-            hint: Some("SQL query to execute (supports Tera substitution)"),
-            default_value: None,
-            reference_kind: ReferenceKind::StaticTeraTemplate,
-        },
-    ]
-});
+static SQLCOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
+    LazyLock::new(|| {
+        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+            "tables",
+            true,
+            Some("Array of {name, source} objects mapping table names to stored data"),
+        );
 
-const SQLCOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    // ResultSpec {
-    //     name: "data",
-    //     ty: TypeDef::Tabular,
-    //     hint: Some("The query result as a DataFrame"),
-    // },
-    // ResultSpec {
-    //     name: "rows",
-    //     ty: TypeDef::Scalar(ScalarType::Number),
-    //     hint: Some("Number of rows in the result"),
-    // },
-    // ResultSpec {
-    //     name: "columns",
-    //     ty: TypeDef::Scalar(ScalarType::Array),
-    //     hint: Some("Column names in the result"),
-    // },
-    ResultSpec::Field {
-        name: "data",
-        ty: TypeDef::Tabular,
-        hint: Some("The query result as a DataFrame"),
-        kind: ResultKind::Data,
-    },
-    ResultSpec::Field {
-        name: "rows",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("Number of rows in the result"),
-        kind: ResultKind::Meta,
-    },
-    ResultSpec::Field {
-        name: "columns",
-        ty: TypeDef::Scalar(ScalarType::Array),
-        hint: Some("Column names in the result"),
-        kind: ResultKind::Meta,
-    },
-];
+        let (fields, _) = fields.add_literal(
+            "name",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Table name to use in SQL query"),
+        );
+        let fields = fields.add_template(
+            "source",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Path to tabular data in store (e.g., 'load.users.data')"),
+            ReferenceKind::StorePath,
+        );
+
+        pending
+            .finalise_attribute(fields)
+            .attribute(AttributeSpec {
+                name: "query",
+                ty: TypeDef::Scalar(ScalarType::String),
+                required: true,
+                hint: Some("SQL query to execute (supports Tera substitution)"),
+                default_value: None,
+                reference_kind: ReferenceKind::StaticTeraTemplate,
+            })
+            .fixed_result("data", TypeDef::Tabular, Some("The query result as a DataFrame"), ResultKind::Data)
+            .fixed_result("rows", TypeDef::Scalar(ScalarType::Number), Some("Number of rows in the result"), ResultKind::Meta)
+            .fixed_result("columns", TypeDef::Scalar(ScalarType::Array), Some("Column names in the result"), ResultKind::Meta)
+            .build()
+    });
 
 struct TableMapping {
     name: String,
@@ -163,10 +127,10 @@ impl Descriptor for SqlCommand {
         "SqlCommand"
     }
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
-        &SQLCOMMAND_ATTRIBUTES
+        &SQLCOMMAND_SPEC.0
     }
     fn command_results() -> &'static [ResultSpec<&'static str>] {
-        SQLCOMMAND_OUTPUTS
+        &SQLCOMMAND_SPEC.1
     }
 }
 

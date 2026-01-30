@@ -1,0 +1,143 @@
+use crate::imports::*;
+
+use super::{extract_object_fields, LiteralFieldRef, ObjectFields};
+
+// Uses some generics magic to compile time safety for certain spec edge cases.
+
+/*
+    Types:
+    * CommandSpecBuilder - Builder for constructing (attributes, results) pairs with validation
+    * PendingAttribute - Intermediate state while an ArrayOf(ObjectOf) attribute's fields are being built
+*/
+
+pub struct CommandSpecBuilder<T: Into<String>> {
+    attributes: Vec<AttributeSpec<T>>,
+    results: Vec<ResultSpec<T>>,
+}
+
+impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> CommandSpecBuilder<T> {
+    pub fn new() -> Self {
+        Self {
+            attributes: vec![],
+            results: vec![],
+        }
+    }
+
+    pub fn attribute(mut self, spec: AttributeSpec<T>) -> Self {
+        self.attributes.push(spec);
+        self
+    }
+
+    pub fn array_of_objects(
+        self,
+        name: T,
+        required: bool,
+        hint: Option<T>,
+    ) -> (PendingAttribute<T>, ObjectFields<T>) {
+        (
+            PendingAttribute {
+                inner: self,
+                name,
+                required,
+                hint,
+            },
+            ObjectFields::new(),
+        )
+    }
+
+    /// Add a fixed result field
+    pub fn fixed_result(
+        mut self,
+        name: T,
+        ty: TypeDef<T>,
+        hint: Option<T>,
+        kind: ResultKind,
+    ) -> Self {
+        self.results.push(ResultSpec::Field {
+            name,
+            ty,
+            hint,
+            kind,
+        });
+        self
+    }
+
+    pub fn derived_result(
+        mut self,
+        attribute: T,
+        name_field: LiteralFieldRef<T>,
+        ty: Option<TypeDef<T>>,
+        kind: ResultKind,
+    ) -> Self {
+        self.results.push(ResultSpec::DerivedFromSingleAttribute {
+            attribute,
+            name_field,
+            ty,
+            kind,
+        });
+        self
+    }
+
+    pub fn build(self) -> (Vec<AttributeSpec<T>>, Vec<ResultSpec<T>>) {
+        for result in &self.results {
+            if let ResultSpec::DerivedFromSingleAttribute {
+                attribute,
+                name_field,
+                ..
+            } = result
+            {
+                let attr = self
+                    .attributes
+                    .iter()
+                    .find(|a| &a.name == attribute)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "Derived result references unknown attribute '{:?}'",
+                            attribute
+                        )
+                    });
+
+                let fields = extract_object_fields(&attr.ty).unwrap_or_else(|| {
+                    panic!(
+                        "Derived result attribute '{:?}' must be ArrayOf(ObjectOf)",
+                        attribute
+                    )
+                });
+
+                let field_name = name_field.name();
+                assert!(
+                    fields.iter().any(|f| &f.name == field_name),
+                    "Derived result name_field '{:?}' not found in attribute '{:?}' fields",
+                    field_name,
+                    attribute,
+                );
+            }
+        }
+
+        (self.attributes, self.results)
+    }
+}
+
+pub struct PendingAttribute<T: Into<String>> {
+    inner: CommandSpecBuilder<T>,
+    name: T,
+    required: bool,
+    hint: Option<T>,
+}
+
+impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> PendingAttribute<T> {
+    pub fn finalise_attribute(self, fields: ObjectFields<T>) -> CommandSpecBuilder<T> {
+        let mut builder = self.inner;
+        builder.attributes.push(AttributeSpec {
+            name: self.name,
+            ty: TypeDef::ArrayOf(Box::new(TypeDef::ObjectOf {
+                fields: fields.build(),
+            })),
+            required: self.required,
+            hint: self.hint,
+            default_value: None,
+            reference_kind: ReferenceKind::Unsupported,
+        });
+        builder
+    }
+}

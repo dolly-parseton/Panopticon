@@ -2,7 +2,7 @@ use crate::imports::*;
 
 /*
     Types:
-    * ResultSpec - Struct representing the specification of a result
+    * ResultSpec - Enum representing the specification of a result (fixed or derived)
     * ResultKind - Enum representing the kind of result (Data or Meta)
 */
 
@@ -15,17 +15,11 @@ pub enum ResultSpec<T: Into<String>> {
         kind: ResultKind,
     },
     DerivedFromSingleAttribute {
-        attribute: T,  // The name of the AttributSpec this result is derived from
-        name_field: T, // The field in FieldSpec that provides the name of this result
-        ty: TypeDef<T>,
+        attribute: T,                   // The name of the AttributeSpec this result is derived from
+        name_field: LiteralFieldRef<T>, // Compile-time proof that the source field is literal
+        ty: Option<TypeDef<T>>,         // None = inferred from runtime value
         kind: ResultKind,
     },
-    // DervivedFromGroupAttribute {
-    //     attribute: T,               // The name of the AttributSpec this result is derived from
-    //     name_field: T,              // The field in FieldSpec that provides the name of this result
-    //     fields: Vec<ResultSpec<T>>, // For derived nested results.
-    //     kind: ResultKind,
-    // },
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
@@ -35,8 +29,8 @@ pub enum ResultKind {
 }
 
 impl From<ResultSpec<&'static str>> for ResultSpec<String> {
-    fn from(attr: ResultSpec<&'static str>) -> Self {
-        match attr {
+    fn from(spec: ResultSpec<&'static str>) -> Self {
+        match spec {
             ResultSpec::Field {
                 name,
                 ty,
@@ -56,7 +50,7 @@ impl From<ResultSpec<&'static str>> for ResultSpec<String> {
             } => ResultSpec::DerivedFromSingleAttribute {
                 attribute: attribute.into(),
                 name_field: name_field.into(),
-                ty: ty.into(),
+                ty: ty.map(|t| t.into()),
                 kind,
             },
         }

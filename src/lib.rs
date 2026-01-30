@@ -45,8 +45,9 @@ pub(crate) mod imports {
 
     // Spec types
     pub use crate::spec::{
-        FieldSpec, ReferenceKind, TypeDef,
+        FieldSpec, LiteralFieldRef, ObjectFields, ReferenceKind, TypeDef,
         attribute::{AttributeSpec, Attributes},
+        builder::{CommandSpecBuilder, PendingAttribute},
         command::CommandSpec,
         result::{ResultKind, ResultSpec},
     };

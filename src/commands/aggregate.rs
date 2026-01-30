@@ -1,63 +1,47 @@
 use crate::imports::*;
 use polars::prelude::*;
 
-static AGGREGATECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = LazyLock::new(
-    || {
-        vec![
-            AttributeSpec {
-                name: "source",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: Some("Path to tabular data in store (e.g., 'query.results.data')"),
-                default_value: None,
-                reference_kind: ReferenceKind::StorePath,
-            },
-            AttributeSpec {
-                name: "aggregations",
-                ty: TypeDef::ArrayOf(Box::new(TypeDef::ObjectOf {
-                    fields: vec![
-                        FieldSpec {
-                            name: "name",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: true,
-                            hint: Some("Output scalar name"),
-                            reference_kind: ReferenceKind::Unsupported,
-                        },
-                        FieldSpec {
-                            name: "column",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: false,
-                            hint: Some("Column to aggregate (not required for 'count')"),
-                            reference_kind: ReferenceKind::Unsupported,
-                        },
-                        FieldSpec {
-                            name: "op",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: true,
-                            hint: Some(
-                                "Operation: sum, mean, min, max, count, first, last, std, median, n_unique, null_count",
-                            ),
-                            reference_kind: ReferenceKind::Unsupported,
-                        },
-                    ],
-                })),
-                required: true,
-                hint: Some("Array of {name, column, op} aggregation specifications"),
-                default_value: None,
-                reference_kind: ReferenceKind::Unsupported,
-            },
-        ]
-    },
-);
+static AGGREGATECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
+    LazyLock::new(|| {
+        let builder = CommandSpecBuilder::new().attribute(AttributeSpec {
+            name: "source",
+            ty: TypeDef::Scalar(ScalarType::String),
+            required: true,
+            hint: Some("Path to tabular data in store (e.g., 'query.results.data')"),
+            default_value: None,
+            reference_kind: ReferenceKind::StorePath,
+        });
 
-// Outputs are dynamic - each aggregation produces a named scalar
-const AGGREGATECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] =
-    &[ResultSpec::DerivedFromSingleAttribute {
-        attribute: "aggregations",
-        name_field: "name",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        kind: ResultKind::Data,
-    }];
+        let (pending, fields) = builder.array_of_objects(
+            "aggregations",
+            true,
+            Some("Array of {name, column, op} aggregation specifications"),
+        );
+
+        let (fields, name_ref) = fields.add_literal(
+            "name",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Output scalar name"),
+        );
+        let (fields, _) = fields.add_literal(
+            "column",
+            TypeDef::Scalar(ScalarType::String),
+            false,
+            Some("Column to aggregate (not required for 'count')"),
+        );
+        let (fields, _) = fields.add_literal(
+            "op",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Operation: sum, mean, min, max, count, first, last, std, median, n_unique, null_count"),
+        );
+
+        pending
+            .finalise_attribute(fields)
+            .derived_result("aggregations", name_ref, None, ResultKind::Data)
+            .build()
+    });
 
 #[derive(Debug, Clone, Copy)]
 enum AggregateOp {
@@ -313,10 +297,10 @@ impl Descriptor for AggregateCommand {
         "AggregateCommand"
     }
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
-        &AGGREGATECOMMAND_ATTRIBUTES
+        &AGGREGATECOMMAND_SPEC.0
     }
     fn command_results() -> &'static [ResultSpec<&'static str>] {
-        AGGREGATECOMMAND_OUTPUTS
+        &AGGREGATECOMMAND_SPEC.1
     }
 }
 

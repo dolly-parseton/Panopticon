@@ -1,79 +1,43 @@
 use crate::imports::*;
 
-static CONDITIONCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> =
+static CONDITIONCOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
     LazyLock::new(|| {
-        vec![
-            AttributeSpec {
-                name: "branches",
-                ty: TypeDef::ArrayOf(Box::new(TypeDef::ObjectOf {
-                    fields: vec![
-                        FieldSpec {
-                            name: "if",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: true,
-                            hint: Some("Tera expression to evaluate as condition"),
-                            reference_kind: ReferenceKind::RuntimeTeraTemplate,
-                        },
-                        FieldSpec {
-                            name: "then",
-                            ty: TypeDef::Scalar(ScalarType::String),
-                            required: true,
-                            hint: Some("Value if condition is true (supports Tera substitution)"),
-                            reference_kind: ReferenceKind::StaticTeraTemplate,
-                        },
-                    ],
-                })),
-                required: true,
-                hint: Some("Array of {if, then} objects evaluated in order"),
-                default_value: None,
-                reference_kind: ReferenceKind::Unsupported,
-            },
-            AttributeSpec {
+        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+            "branches",
+            true,
+            Some("Array of {if, then} objects evaluated in order"),
+        );
+
+        let fields = fields.add_template(
+            "if",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Tera expression to evaluate as condition"),
+            ReferenceKind::RuntimeTeraTemplate,
+        );
+        let fields = fields.add_template(
+            "then",
+            TypeDef::Scalar(ScalarType::String),
+            true,
+            Some("Value if condition is true (supports Tera substitution)"),
+            ReferenceKind::StaticTeraTemplate,
+        );
+
+        pending
+            .finalise_attribute(fields)
+            .attribute(AttributeSpec {
                 name: "default",
                 ty: TypeDef::Scalar(ScalarType::String),
                 required: false,
                 hint: Some("Default value if no branch matches (supports Tera substitution)"),
                 default_value: None,
                 reference_kind: ReferenceKind::StaticTeraTemplate,
-            },
-        ]
+            })
+            .fixed_result("result", TypeDef::Scalar(ScalarType::String), Some("The value from the matched branch or default."), ResultKind::Data)
+            .fixed_result("matched", TypeDef::Scalar(ScalarType::Bool), Some("Whether a branch condition matched (false if default was used)."), ResultKind::Data)
+            .fixed_result("branch_index", TypeDef::Scalar(ScalarType::Number), Some("Index of the matched branch (0-based), or -1 if default was used."), ResultKind::Data)
+            .build()
     });
-
-const CONDITIONCOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    // ResultSpec {
-    //     name: "result",
-    //     ty: TypeDef::Scalar(ScalarType::String),
-    //     hint: Some("The value from the matched branch or default."),
-    // },
-    // ResultSpec {
-    //     name: "matched",
-    //     ty: TypeDef::Scalar(ScalarType::Bool),
-    //     hint: Some("Whether a branch condition matched (false if default was used)."),
-    // },
-    // ResultSpec {
-    //     name: "branch_index",
-    //     ty: TypeDef::Scalar(ScalarType::Number),
-    //     hint: Some("Index of the matched branch (0-based), or -1 if default was used."),
-    // },
-    ResultSpec::Field {
-        name: "result",
-        ty: TypeDef::Scalar(ScalarType::String),
-        hint: Some("The value from the matched branch or default."),
-        kind: ResultKind::Data,
-    },
-    ResultSpec::Field {
-        name: "matched",
-        ty: TypeDef::Scalar(ScalarType::Bool),
-        hint: Some("Whether a branch condition matched (false if default was used)."),
-        kind: ResultKind::Data,
-    },
-    ResultSpec::Field {
-        name: "branch_index",
-        ty: TypeDef::Scalar(ScalarType::Number),
-        hint: Some("Index of the matched branch (0-based), or -1 if default was used."),
-        kind: ResultKind::Data,
-    },
-];
 
 struct Branch {
     condition: String,
@@ -134,10 +98,10 @@ impl Descriptor for ConditionCommand {
         "ConditionCommand"
     }
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
-        &CONDITIONCOMMAND_ATTRIBUTES
+        &CONDITIONCOMMAND_SPEC.0
     }
     fn command_results() -> &'static [ResultSpec<&'static str>] {
-        CONDITIONCOMMAND_OUTPUTS
+        &CONDITIONCOMMAND_SPEC.1
     }
 }
 

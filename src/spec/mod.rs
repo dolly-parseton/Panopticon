@@ -1,6 +1,7 @@
 use crate::imports::*;
 
 pub mod attribute;
+pub mod builder;
 pub mod command;
 pub mod result;
 
@@ -9,6 +10,8 @@ pub mod result;
     * TypeDef - Enum representing the type definition of a value (Scalar, Tabular, ArrayOf, ObjectOf)
     * FieldSpec - Struct representing the specification of a field in an object type
     * ReferenceKind - Enum indicating if a field supports references and how to evaluate them.
+    * LiteralFieldRef - Opaque handle proving a field has ReferenceKind::Unsupported (compile-time safety)
+    * ObjectFields - Builder for ObjectOf fields that enforces LiteralFieldRef safety
 */
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum TypeDef<T: Into<String>> {
@@ -28,6 +31,18 @@ impl From<TypeDef<&'static str>> for TypeDef<String> {
                 fields: fields.into_iter().map(|f| f.into()).collect(),
             },
         }
+    }
+}
+
+/// Extracts the inner FieldSpec vec from an ArrayOf(ObjectOf { fields }) TypeDef.
+/// Returns None if the TypeDef is not ArrayOf(ObjectOf).
+pub fn extract_object_fields<T: Into<String>>(ty: &TypeDef<T>) -> Option<&Vec<FieldSpec<T>>> {
+    match ty {
+        TypeDef::ArrayOf(inner) => match inner.as_ref() {
+            TypeDef::ObjectOf { fields } => Some(fields),
+            _ => None,
+        },
+        _ => None,
     }
 }
 
@@ -60,4 +75,90 @@ pub enum ReferenceKind {
     StorePath,           // The field is a direct store path reference. Tabular or Scalar
     #[default]
     Unsupported,
+}
+
+// ─── LiteralFieldRef ───
+//
+// Opaque proof that a field has ReferenceKind::Unsupported (literal value).
+// Fields are PRIVATE — can only be constructed inside this module via ObjectFields::add_literal().
+// This is the compile-time enforcement mechanism: ResultSpec::DerivedFromSingleAttribute
+// requires a LiteralFieldRef, so derived result names can only come from literal fields.
+
+#[derive(Debug, Clone, PartialEq, Hash, Eq)]
+pub struct LiteralFieldRef<T: Into<String>> {
+    name: T,
+}
+
+impl<T: Into<String> + Clone> LiteralFieldRef<T> {
+    pub fn name(&self) -> &T {
+        &self.name
+    }
+}
+
+impl From<LiteralFieldRef<&'static str>> for LiteralFieldRef<String> {
+    fn from(r: LiteralFieldRef<&'static str>) -> Self {
+        LiteralFieldRef {
+            name: r.name.into(),
+        }
+    }
+}
+
+// ─── ObjectFields builder ───
+//
+// The only way to obtain a LiteralFieldRef is through this builder.
+// add_literal() returns a LiteralFieldRef; add_template() does not.
+// This prevents template fields from being used as derived result names.
+
+pub struct ObjectFields<T: Into<String>> {
+    fields: Vec<FieldSpec<T>>,
+}
+
+impl<T: Into<String> + Clone> ObjectFields<T> {
+    pub fn new() -> Self {
+        Self { fields: vec![] }
+    }
+
+    /// Add a literal field (ReferenceKind::Unsupported).
+    /// Returns Self AND a LiteralFieldRef — proof this field is safe for derived result names.
+    pub fn add_literal(
+        mut self,
+        name: T,
+        ty: TypeDef<T>,
+        required: bool,
+        hint: Option<T>,
+    ) -> (Self, LiteralFieldRef<T>) {
+        let handle = LiteralFieldRef { name: name.clone() };
+        self.fields.push(FieldSpec {
+            name,
+            ty,
+            required,
+            hint,
+            reference_kind: ReferenceKind::Unsupported,
+        });
+        (self, handle)
+    }
+
+    /// Add a template/reference field. No LiteralFieldRef returned —
+    /// cannot be used as a derived result name source.
+    pub fn add_template(
+        mut self,
+        name: T,
+        ty: TypeDef<T>,
+        required: bool,
+        hint: Option<T>,
+        kind: ReferenceKind,
+    ) -> Self {
+        self.fields.push(FieldSpec {
+            name,
+            ty,
+            required,
+            hint,
+            reference_kind: kind,
+        });
+        self
+    }
+
+    pub fn build(self) -> Vec<FieldSpec<T>> {
+        self.fields
+    }
 }
