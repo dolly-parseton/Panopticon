@@ -50,7 +50,6 @@ fn extract_identifiers_recursive<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
 
     #[test]
     fn test_extract_context_dependencies() {

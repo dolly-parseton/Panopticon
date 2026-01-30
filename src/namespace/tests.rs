@@ -1,5 +1,6 @@
 use super::*;
-use crate::imports::*;
+use crate::namespace::sealed::Build;
+use crate::test_utils::init_tracing;
 
 #[tokio::test]
 async fn test_extract_items_scalar_array() {
@@ -406,4 +407,123 @@ async fn test_extract_items_error_key_not_found() {
     let result = ns_type.resolve_iter_values(&context).await;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("not found"));
+}
+
+#[tokio::test]
+async fn test_insert_raw_renders_in_tera_template() {
+    init_tracing();
+    use crate::values::scalar::ScalarStore;
+
+    let store = ScalarStore::new();
+
+    // insert_raw should place a value directly into the Tera context
+    store
+        .insert_raw("item", ScalarValue::String("hello".to_string()))
+        .await
+        .unwrap();
+    store
+        .insert_raw("idx", to_scalar::i64(42))
+        .await
+        .unwrap();
+
+    // Verify both render correctly in templates
+    let result = store.render_template("{{ item }}").await.unwrap();
+    assert_eq!(result, "hello");
+
+    let result = store.render_template("{{ idx }}").await.unwrap();
+    assert_eq!(result, "42");
+
+    // Verify removal works (remove uses namespace() which is first segment)
+    store
+        .remove(&StorePath::from_segments(["item"]))
+        .await
+        .unwrap();
+
+    // After removal, rendering should fail because the variable is gone
+    let result = store.render_template("{{ item }}").await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_iterative_pipeline_indexed_outputs() {
+    init_tracing();
+    use crate::commands::template::TemplateCommand;
+
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let mut pipeline = Pipeline::new();
+
+    // Static source data
+    pipeline
+        .add_namespace(
+            NamespaceBuilder::new("source")
+                .static_ns()
+                .insert(
+                    "items",
+                    ScalarValue::Array(vec![
+                        ScalarValue::String("alpha".to_string()),
+                        ScalarValue::String("beta".to_string()),
+                    ]),
+                ),
+        )
+        .unwrap();
+
+    // Iterative namespace with a TemplateCommand
+    let attrs = ObjectBuilder::new()
+        .insert(
+            "templates",
+            ScalarValue::Array(vec![ObjectBuilder::new()
+                .insert("name", "tpl")
+                .insert("content", "Value: {{ item }}")
+                .build_scalar()]),
+        )
+        .insert("render", "tpl")
+        .insert(
+            "output",
+            format!(
+                "{}/out_{{{{ idx }}}}.txt",
+                temp_dir.path().display()
+            ),
+        )
+        .insert("capture", true)
+        .build_hashmap();
+
+    let mut handle = pipeline
+        .add_namespace(
+            NamespaceBuilder::new("process")
+                .iterative()
+                .store_path(StorePath::from_segments(["source", "items"]))
+                .scalar_array(None)
+                .iter_var("item")
+                .index_var("idx"),
+        )
+        .unwrap();
+    handle.add_command::<TemplateCommand>("render", &attrs).unwrap();
+
+    let context = pipeline.execute().await.unwrap();
+
+    // Each iteration should have its own indexed output path
+    let prefix_0 = StorePath::from_segments(["process", "render", "0"]);
+    let prefix_1 = StorePath::from_segments(["process", "render", "1"]);
+
+    let content_0 = context
+        .scalar()
+        .get(&prefix_0.with_segment("content"))
+        .await
+        .unwrap()
+        .unwrap();
+    let content_1 = context
+        .scalar()
+        .get(&prefix_1.with_segment("content"))
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(content_0.as_str().unwrap(), "Value: alpha");
+    assert_eq!(content_1.as_str().unwrap(), "Value: beta");
+
+    // Verify the old non-indexed path does NOT exist (no overwrite at root)
+    let old_path = StorePath::from_segments(["process", "render", "content"]);
+    let old_result = context.scalar().get(&old_path).await.unwrap();
+    assert!(old_result.is_none());
 }

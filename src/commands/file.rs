@@ -10,10 +10,8 @@ static FILECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = Lazy
                     name: "name",
                     ty: TypeDef::Scalar(ScalarType::String),
                     required: true,
-                    hint: Some(
-                        "Identifier for this file in the TabularStore (supports tera templates)",
-                    ),
-                    reference_kind: ReferenceKind::StaticTeraTemplate,
+                    hint: Some("Identifier for this file in the TabularStore"),
+                    reference_kind: ReferenceKind::Unsupported,
                 },
                 FieldSpec {
                     name: "file",
@@ -41,20 +39,29 @@ static FILECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = Lazy
 });
 
 const FILECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    ResultSpec {
+    ResultSpec::Field {
         name: "count",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("The number of files loaded."),
+        kind: ResultKind::Meta,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "total_rows",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("The total number of rows across all loaded files."),
+        kind: ResultKind::Meta,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "total_size",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("The total size in bytes across all loaded files."),
+        kind: ResultKind::Meta,
+    },
+    ResultSpec::DerivedFromSingleAttribute {
+        attribute: "files",
+        name_field: "name",
+        ty: TypeDef::Tabular,
+        kind: ResultKind::Data,
     },
 ];
 
@@ -177,7 +184,7 @@ impl Descriptor for FileCommand {
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &FILECOMMAND_ATTRIBUTES
     }
-    fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
+    fn command_results() -> &'static [ResultSpec<&'static str>] {
         FILECOMMAND_OUTPUTS
     }
 }
@@ -214,7 +221,7 @@ impl FromAttributes for FileCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
+    use crate::test_utils::init_tracing;
 
     fn fixtures_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
@@ -329,7 +336,7 @@ mod tests {
         )]);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
@@ -370,7 +377,7 @@ mod tests {
         )]);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
@@ -400,7 +407,7 @@ mod tests {
         )]);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
@@ -437,7 +444,7 @@ mod tests {
         ]);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
@@ -486,7 +493,7 @@ mod tests {
         ]);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
@@ -506,7 +513,7 @@ mod tests {
         let attrs = file_attrs(vec![]);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
@@ -624,7 +631,7 @@ mod tests {
         let mut pipeline = Pipeline::new();
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<FileCommand>("factory_test", &attrs)
             .unwrap();

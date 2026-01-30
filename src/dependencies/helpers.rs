@@ -87,7 +87,6 @@ fn extract_from_scalar(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
 
     fn make_specs() -> Vec<AttributeSpec<&'static str>> {
         vec![

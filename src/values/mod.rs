@@ -6,19 +6,6 @@ pub mod scalar;
 pub mod tabular;
 
 /*
-    Types: TODO, extend result store as a product of ExecutionContext after pipeline execution finishes. It'll need several 'save to file' and display methods.
-    * ResultStore - A map of result names to ResultValue (previously Results, confusingly named)
-    * ResultsValue - Enum representing either a ScalarValue or TabularValue
-*/
-pub type ResultStore = std::collections::HashMap<String, ResultValue>;
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum ResultValue {
-    Scalar(ScalarValue),
-    Tabular(TabularValue),
-}
-
-/*
     StorePath - Represents a path to a value in the store, e.g., "namespace.key.subkey"
 */
 pub mod store_path {
@@ -41,6 +28,9 @@ pub mod store_path {
             let mut new_path = self.clone();
             new_path.segments.push(segment.into());
             new_path
+        }
+        pub fn with_index(&self, index: usize) -> Self {
+            self.with_segment(index.to_string())
         }
         pub fn to_dotted(&self) -> String {
             self.segments.join(".")

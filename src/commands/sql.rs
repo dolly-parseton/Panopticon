@@ -40,20 +40,38 @@ static SQLCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = LazyL
 });
 
 const SQLCOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    ResultSpec {
+    // ResultSpec {
+    //     name: "data",
+    //     ty: TypeDef::Tabular,
+    //     hint: Some("The query result as a DataFrame"),
+    // },
+    // ResultSpec {
+    //     name: "rows",
+    //     ty: TypeDef::Scalar(ScalarType::Number),
+    //     hint: Some("Number of rows in the result"),
+    // },
+    // ResultSpec {
+    //     name: "columns",
+    //     ty: TypeDef::Scalar(ScalarType::Array),
+    //     hint: Some("Column names in the result"),
+    // },
+    ResultSpec::Field {
         name: "data",
         ty: TypeDef::Tabular,
         hint: Some("The query result as a DataFrame"),
+        kind: ResultKind::Data,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "rows",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("Number of rows in the result"),
+        kind: ResultKind::Meta,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "columns",
         ty: TypeDef::Scalar(ScalarType::Array),
         hint: Some("Column names in the result"),
+        kind: ResultKind::Meta,
     },
 ];
 
@@ -147,7 +165,7 @@ impl Descriptor for SqlCommand {
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &SQLCOMMAND_ATTRIBUTES
     }
-    fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
+    fn command_results() -> &'static [ResultSpec<&'static str>] {
         SQLCOMMAND_OUTPUTS
     }
 }
@@ -179,7 +197,7 @@ impl FromAttributes for SqlCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
+    use crate::test_utils::init_tracing;
     use polars::prelude::*;
 
     fn fixtures_dir() -> PathBuf {
@@ -263,7 +281,7 @@ mod tests {
             .build_hashmap();
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("files").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("files"))
             .unwrap()
             .add_command::<FileCommand>("load", &file_attrs)
             .unwrap();
@@ -281,7 +299,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("query").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("query"))
             .unwrap()
             .add_command::<SqlCommand>("all_users", &attrs)
             .unwrap();
@@ -362,7 +380,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("query").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("query"))
             .unwrap()
             .add_command::<SqlCommand>("stats", &attrs)
             .unwrap();
@@ -460,13 +478,13 @@ mod tests {
         let mut pipeline = Pipeline::new();
 
         // Add inputs namespace with filter value
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("min_age", ScalarValue::Number(25.into()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("min_age", ScalarValue::Number(25.into())),
+            )
+            .unwrap();
 
         setup_test_data(&mut pipeline).await;
 
@@ -476,7 +494,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("query").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("query"))
             .unwrap()
             .add_command::<SqlCommand>("filtered", &attrs)
             .unwrap();

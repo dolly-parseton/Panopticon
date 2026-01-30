@@ -169,7 +169,7 @@ pub(in crate::values) fn get_at_path<'a>(
     Some(current)
 }
 
-pub(crate) fn scalar_type_of(value: &ScalarValue) -> ScalarType {
+pub fn scalar_type_of(value: &ScalarValue) -> ScalarType {
     match value {
         ScalarValue::Null => ScalarType::Null,
         ScalarValue::Bool(_) => ScalarType::Bool,
@@ -180,7 +180,7 @@ pub(crate) fn scalar_type_of(value: &ScalarValue) -> ScalarType {
     }
 }
 
-pub(crate) fn parse_scalar(s: &str) -> ScalarValue {
+pub fn parse_scalar(s: &str) -> ScalarValue {
     match s {
         "true" => ScalarValue::Bool(true),
         "false" => ScalarValue::Bool(false),
@@ -200,7 +200,7 @@ pub(crate) fn parse_scalar(s: &str) -> ScalarValue {
     }
 }
 
-pub(crate) fn is_truthy(value: &ScalarValue) -> bool {
+pub fn is_truthy(value: &ScalarValue) -> bool {
     match value {
         ScalarValue::Null => false,
         ScalarValue::Bool(b) => *b,

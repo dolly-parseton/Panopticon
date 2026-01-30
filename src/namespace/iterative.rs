@@ -1,8 +1,13 @@
 use super::sealed;
 use crate::imports::*;
 
+impl sealed::Build for NamespaceBuilder<sealed::Iterative> {
+    fn build(self) -> Result<Namespace> {
+        NamespaceBuilder::<sealed::Iterative>::build(self)
+    }
+}
 impl NamespaceBuilder<sealed::Iterative> {
-    pub fn build(self) -> Result<Namespace> {
+    fn build(self) -> Result<Namespace> {
         // Ensure required fields are set
         let store_path = self
             .store_path

@@ -89,6 +89,13 @@ impl ScalarStore {
         ctx.insert(store_key, &target_value);
         Ok(())
     }
+    /// Insert a value directly into the Tera context as a top-level key.
+    /// Used for iteration variables that need to be accessible as `{{ var_name }}` in templates.
+    pub async fn insert_raw(&self, key: &str, value: ScalarValue) -> Result<()> {
+        let mut ctx = self.store.write().await;
+        ctx.insert(key, &value);
+        Ok(())
+    }
     pub async fn get<'a>(&'a self, key: &'a StorePath) -> Result<Option<ScalarValue>> {
         let store_key = key
             .namespace()

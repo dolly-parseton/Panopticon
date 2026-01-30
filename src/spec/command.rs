@@ -5,13 +5,6 @@ use crate::imports::*;
     * CommandSpec - Struct representing the specification of a command
 */
 pub struct CommandSpec {
-    // namespace_index: usize,
-    // name: String,
-    // attributes: Attributes,
-    // builder: CommandFactory,
-    // exepected_attributes: Vec<AttributeSpec<String>>,
-    // expected_results: Vec<ResultSpec<String>>,
-    // dependencies: HashSet<StorePath>,
     pub namespace_index: usize,
     pub name: String,
     pub attributes: Attributes,
@@ -33,7 +26,7 @@ impl CommandSpec {
                 .iter()
                 .map(|attr| AttributeSpec::<String>::from(attr.clone()))
                 .collect(),
-            expected_results: T::expected_outputs()
+            expected_results: T::command_results()
                 .iter()
                 .map(|res| ResultSpec::<String>::from(res.clone()))
                 .collect(),

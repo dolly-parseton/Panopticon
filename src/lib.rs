@@ -5,7 +5,7 @@ mod pipeline;
 mod spec;
 mod values;
 
-// Library exports
+// Public API - external consumers use this via `panopticon_core::prelude::*`
 pub mod prelude {
     // Built-in Commands
     pub use crate::commands::aggregate::AggregateCommand;
@@ -28,60 +28,47 @@ pub mod prelude {
     pub use crate::values::tabular::TabularValue;
 }
 
-// Internal imports for use within the crate
-#[allow(unused_imports)]
+// Internal imports - layers on prelude with crate-internal types and std-lib conveniences.
+// All internal modules use `use crate::imports::*` as their single import line.
 pub(crate) mod imports {
-    // Built-in Commands
-    pub use crate::commands::aggregate::AggregateCommand;
-    pub use crate::commands::condition::ConditionCommand;
-    pub use crate::commands::file::FileCommand;
-    pub use crate::commands::sql::SqlCommand;
-    pub use crate::commands::template::TemplateCommand;
+    pub use crate::prelude::*;
 
-    // Core types
-    pub use crate::values::{context::*, helpers::*, scalar::*, store_path::StorePath, tabular::*};
+    // Internal value types (not part of public API)
+    pub use crate::values::helpers::{
+        InsertBatch, is_truthy, parse_scalar, scalar_type_of, to_scalar,
+    };
+    pub use crate::values::scalar::{ScalarAsExt, ScalarMapExt, ScalarStore, ScalarType};
+    pub use crate::values::tabular::TabularStore;
 
-    pub use crate::namespace::{ExecutionMode, IteratorType, Namespace, NamespaceBuilder};
+    // Namespace internals
+    pub use crate::namespace::{ExecutionMode, IteratorType, NamespaceHandle, RESERVED_NAMESPACES};
 
+    // Spec types
     pub use crate::spec::{
         FieldSpec, ReferenceKind, TypeDef,
         attribute::{AttributeSpec, Attributes},
         command::CommandSpec,
-        result::ResultSpec,
+        result::{ResultKind, ResultSpec},
     };
 
-    pub use crate::pipeline::Pipeline;
+    // Pipeline traits
     pub use crate::pipeline::traits::{
         Command, CommandFactory, Descriptor, Executable, FromAttributes,
     };
-
-    // Consts
-    pub use crate::namespace::RESERVED_NAMESPACES;
-    pub use crate::pipeline::traits::COMMON_ATTRIBUTES;
-
-    // Helpers
-    // pub use crate::values::helpers::to_scalar;
-    // pub use crate::values::scalar::{ScalarMapExt as _, ScalarValueExt as _};
 
     // Result and error handling
     pub type Result<T> = anyhow::Result<T>;
     pub use anyhow::Context as _;
 
-    // File I/O
-    pub use std::path::PathBuf;
-
-    // Collections
+    // Std library
     pub use std::collections::{HashMap, HashSet, VecDeque};
-
-    // Async
-    pub use std::sync::Arc;
+    pub use std::path::PathBuf;
+    pub use std::sync::{Arc, LazyLock};
     pub use tokio::sync::RwLock;
+}
 
-    // Lazy initialization
-    pub use std::sync::LazyLock;
-
-    // Testing - TODO, consider adding a broader set of test utilities.
-    #[cfg(test)]
+#[cfg(test)]
+pub(crate) mod test_utils {
     pub fn init_tracing() {
         let _ = tracing_subscriber::fmt()
             .with_env_filter("debug")
@@ -89,11 +76,3 @@ pub(crate) mod imports {
             .try_init();
     }
 }
-
-/*
-    Bits im not sure what do with:
-    pub fn scalar_value_from<T: serde::Serialize>(input: T) -> Result<ScalarValue> {
-    let value = tera::to_value(input)?;
-    Ok(value)
-}
-*/

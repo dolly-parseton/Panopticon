@@ -1,5 +1,7 @@
 use crate::imports::*;
 
+use crate::namespace::sealed::Build;
+
 pub mod order;
 pub mod traits;
 pub mod validation;
@@ -8,8 +10,8 @@ use order::{ExecutionGroup, ExecutionPlan};
 
 #[derive(Default)]
 pub struct Pipeline {
-    pub namespaces: Vec<Namespace>,
-    pub commands: Vec<CommandSpec>,
+    pub(crate) namespaces: Vec<Namespace>,
+    pub(crate) commands: Vec<CommandSpec>,
 }
 
 impl Pipeline {
@@ -17,7 +19,16 @@ impl Pipeline {
         Self::default()
     }
 
-    pub fn add_namespace(&mut self, namespace: Namespace) -> Result<NamespaceHandle<'_>> {
+    pub fn add_namespace<T>(
+        &mut self,
+        namespace: NamespaceBuilder<T>,
+    ) -> Result<NamespaceHandle<'_, T>>
+    where
+        NamespaceBuilder<T>: Build,
+    {
+        let marker = std::marker::PhantomData::<T>;
+        let namespace = namespace.build()?;
+
         let debug_data = (
             namespace.name().to_string(),
             match namespace.ty() {
@@ -55,10 +66,16 @@ impl Pipeline {
         Ok(NamespaceHandle {
             commands: self,
             namespace_index: index,
+            _marker: marker,
         })
     }
 
-    fn add_command<T>(&mut self, namespace: usize, name: &str, attrs: &Attributes) -> Result<()>
+    pub(crate) fn add_command<T>(
+        &mut self,
+        namespace: usize,
+        name: &str,
+        attrs: &Attributes,
+    ) -> Result<()>
     where
         T: Command,
     {
@@ -128,7 +145,7 @@ impl Pipeline {
             );
             match &namespace.ty() {
                 ExecutionMode::Once => {
-                    self.execute_commands(&commands, namespace.name(), &context)
+                    self.execute_commands(&commands, namespace.name(), &context, None)
                         .await?;
                 }
                 ExecutionMode::Iterative {
@@ -156,19 +173,16 @@ impl Pipeline {
                         if let Some(var_name) = iter_var {
                             context
                                 .scalar()
-                                .insert(&StorePath::from_segments([var_name]), item.clone())
+                                .insert_raw(var_name, item.clone())
                                 .await?;
                         }
                         if let Some(index_name) = index_var {
                             context
                                 .scalar()
-                                .insert(
-                                    &StorePath::from_segments([index_name]),
-                                    to_scalar::i64(index as i64),
-                                )
+                                .insert_raw(index_name, to_scalar::i64(index as i64))
                                 .await?;
                         }
-                        self.execute_commands(&commands, namespace.name(), &context)
+                        self.execute_commands(&commands, namespace.name(), &context, Some(index))
                             .await?;
                         // Remove the iteration variables from the context.
                         if let Some(var_name) = iter_var {
@@ -204,10 +218,12 @@ impl Pipeline {
         commands: &[&CommandSpec],
         namespace: &str,
         context: &ExecutionContext,
+        iteration_index: Option<usize>,
     ) -> Result<()> {
         for command_spec in commands {
             tracing::debug!(
                 command_name = %command_spec.name,
+                iteration_index = ?iteration_index,
                 "Executing command"
             );
             // Run substitution on all string attributes.
@@ -223,8 +239,11 @@ impl Pipeline {
                 command_name = %command_spec.name,
                 "Substituted command attributes and built command instance"
             );
-            // Create output prefix as [namespace, command_name]
-            let output_prefix = StorePath::from_segments([namespace, &command_spec.name]);
+            // Create output prefix as [namespace, command_name] or [namespace, command_name, index]
+            let mut output_prefix = StorePath::from_segments([namespace, &command_spec.name]);
+            if let Some(idx) = iteration_index {
+                output_prefix = output_prefix.with_index(idx);
+            }
             command.execute(context, &output_prefix).await?;
         }
         Ok(())
@@ -258,29 +277,4 @@ async fn substitute_attributes(
         substituted.insert(key.clone(), new_value);
     }
     Ok(substituted)
-}
-
-pub struct NamespaceHandle<'a> {
-    commands: &'a mut Pipeline,
-    namespace_index: usize,
-}
-
-impl<'a> NamespaceHandle<'a> {
-    fn get_namespace_ty(&self) -> &ExecutionMode {
-        self.commands.namespaces[self.namespace_index].ty()
-    }
-
-    pub fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
-    where
-        T: Command,
-    {
-        // Only allow if namespace_ty is not static
-        if let ExecutionMode::Static { .. } = self.get_namespace_ty() {
-            return Err(anyhow::anyhow!(
-                "Cannot add command to namespace of type Static"
-            ));
-        }
-        self.commands
-            .add_command::<T>(self.namespace_index, name, attrs)
-    }
 }

@@ -19,22 +19,60 @@ struct ExecutableWrapper {
 #[async_trait::async_trait]
 impl Executable for ExecutableWrapper {
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
-        if let Some(condition) = &self.when {
-            let template = format!("{{{{ {} }}}}", condition);
-            let result = context.substitute(&template).await?;
-            if !is_truthy(&parse_scalar(&result)) {
-                tracing::debug!(condition = %condition, "Skipping command - 'when' condition is false");
-                return Ok(());
+        // Capture Instant::now() before execution starts
+        let start_time = std::time::Instant::now();
+
+        // Evaluate when condition
+        let skip: bool = {
+            if let Some(condition) = &self.when {
+                let template = format!("{{{{ {} }}}}", condition);
+                let result = context.substitute(&template).await?;
+                !is_truthy(&parse_scalar(&result))
+            } else {
+                false
+            }
+        };
+
+        let result = match skip {
+            true => {
+                tracing::debug!("Skipping command - 'when' condition is false");
+                Ok(())
+            }
+            false => self.inner.execute(context, output_prefix).await,
+        };
+
+        // Now execution is complete log duration inside context using the output prefix
+        let duration = start_time.elapsed().as_millis() as u64;
+        let batch = InsertBatch::new(context, output_prefix);
+        batch.u64("duration_ms", duration).await?;
+        // Set status based on execution result
+        match (skip, &result) {
+            (true, _) => {
+                batch
+                    .string("status", EXECUTION_STATUS_SKIPPED.to_string())
+                    .await?;
+            }
+            (false, Ok(_)) => {
+                batch
+                    .string("status", EXECUTION_STATUS_SUCCESS.to_string())
+                    .await?;
+            }
+            (false, Err(_)) => {
+                batch
+                    .string("status", EXECUTION_STATUS_ERROR.to_string())
+                    .await?;
             }
         }
-        self.inner.execute(context, output_prefix).await
+        // Return original execution result
+        result
     }
 }
 
 /*
     Consts
     * COMMON_ATTRIBUTES - Common attributes shared by all commands
-    ... Might extend later with more common attributes/functionality.
+    * COMMON_RESULTS - Common results shared by all commands
+    * STATUS constants - Standardized execution status strings
 
 */
 pub const COMMON_ATTRIBUTES: &[AttributeSpec<&'static str>] = &[AttributeSpec {
@@ -45,6 +83,25 @@ pub const COMMON_ATTRIBUTES: &[AttributeSpec<&'static str>] = &[AttributeSpec {
     default_value: None,
     reference_kind: ReferenceKind::RuntimeTeraTemplate,
 }];
+
+pub const EXECUTION_STATUS_SUCCESS: &str = "success";
+pub const EXECUTION_STATUS_SKIPPED: &str = "skipped";
+pub const EXECUTION_STATUS_ERROR: &str = "error";
+
+pub const COMMON_RESULTS: &[ResultSpec<&'static str>] = &[
+    ResultSpec::Field {
+        name: "duration_ms",
+        ty: TypeDef::Scalar(ScalarType::Number),
+        kind: ResultKind::Meta,
+        hint: Some("Execution duration of the command in milliseconds"),
+    },
+    ResultSpec::Field {
+        name: "status",
+        ty: TypeDef::Scalar(ScalarType::String),
+        kind: ResultKind::Meta,
+        hint: Some("Execution status of the command: 'success', 'skipped', or 'error'"),
+    },
+];
 
 /*
     Traits:
@@ -58,6 +115,7 @@ pub trait Command: FromAttributes + Descriptor + Executable {}
 // Blanket implementation for any type that implements the required traits
 impl<T: FromAttributes + Descriptor + Executable> Command for T {}
 
+// Todo - Add typed builder derive macro that accepts the Command struct and maybe spec.
 pub trait FromAttributes: Sized + Descriptor {
     fn from_attributes(attrs: &Attributes) -> Result<Self>;
 
@@ -89,8 +147,8 @@ pub trait FromAttributes: Sized + Descriptor {
 pub trait Descriptor: Sized {
     fn command_type() -> &'static str;
     fn command_attributes() -> &'static [AttributeSpec<&'static str>];
-    fn expected_outputs() -> &'static [ResultSpec<&'static str>];
-    // Defaults
+    fn command_results() -> &'static [ResultSpec<&'static str>];
+    // Defaults - Attributes
     fn available_attributes() -> Vec<&'static AttributeSpec<&'static str>> {
         let mut attrs = Vec::new();
         attrs.extend(COMMON_ATTRIBUTES.iter());
@@ -108,6 +166,13 @@ pub trait Descriptor: Sized {
             .iter()
             .filter(|attr| !attr.required)
             .collect()
+    }
+    // Defaults - Results
+    fn available_results() -> Vec<&'static ResultSpec<&'static str>> {
+        let mut results = Vec::new();
+        results.extend(COMMON_RESULTS.iter());
+        results.extend(Self::command_results().iter());
+        results
     }
 }
 

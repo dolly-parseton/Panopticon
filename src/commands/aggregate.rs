@@ -51,7 +51,13 @@ static AGGREGATECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> =
 );
 
 // Outputs are dynamic - each aggregation produces a named scalar
-const AGGREGATECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[];
+const AGGREGATECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] =
+    &[ResultSpec::DerivedFromSingleAttribute {
+        attribute: "aggregations",
+        name_field: "name",
+        ty: TypeDef::Scalar(ScalarType::Number),
+        kind: ResultKind::Data,
+    }];
 
 #[derive(Debug, Clone, Copy)]
 enum AggregateOp {
@@ -309,7 +315,7 @@ impl Descriptor for AggregateCommand {
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &AGGREGATECOMMAND_ATTRIBUTES
     }
-    fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
+    fn command_results() -> &'static [ResultSpec<&'static str>] {
         AGGREGATECOMMAND_OUTPUTS
     }
 }
@@ -357,7 +363,7 @@ impl FromAttributes for AggregateCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
+    use crate::test_utils::init_tracing;
 
     /// Helper to build aggregate command attributes
     fn agg_attrs(source: &str, aggregations: Vec<(&str, Option<&str>, &str)>) -> Attributes {

@@ -76,20 +76,23 @@ static TEMPLATECOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> = 
 );
 
 const TEMPLATECOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    ResultSpec {
+    ResultSpec::Field {
         name: "line_count",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("Number of lines in the rendered output"),
+        kind: ResultKind::Meta,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "size",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("Size in bytes of the rendered output"),
+        kind: ResultKind::Meta,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "content",
         ty: TypeDef::Scalar(ScalarType::String),
-        hint: Some("The rendered content (only populated when 'capture' is true)"),
+        hint: Some("The rendered content (only populated when 'capture' is true, otherwise empty)"),
+        kind: ResultKind::Meta,
     },
 ];
 
@@ -221,7 +224,7 @@ impl Descriptor for TemplateCommand {
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &TEMPLATECOMMAND_ATTRIBUTES
     }
-    fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
+    fn command_results() -> &'static [ResultSpec<&'static str>] {
         TEMPLATECOMMAND_OUTPUTS
     }
 }
@@ -287,7 +290,7 @@ impl FromAttributes for TemplateCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
+    use crate::test_utils::init_tracing;
 
     fn fixtures_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("fixtures")
@@ -355,13 +358,13 @@ mod tests {
         let mut pipeline = Pipeline::new();
 
         // Add static namespace with inputs
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("name", ScalarValue::String("World".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("name", ScalarValue::String("World".to_string())),
+            )
+            .unwrap();
 
         // Add execution namespace
 
@@ -375,7 +378,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
@@ -399,13 +402,13 @@ mod tests {
 
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("value", ScalarValue::Number(42.into()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("value", ScalarValue::Number(42.into())),
+            )
+            .unwrap();
 
         let attrs = template_attrs(
             "test",
@@ -415,7 +418,7 @@ mod tests {
             true,
         );
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
@@ -434,21 +437,21 @@ mod tests {
 
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("title", ScalarValue::String("Report".to_string()))
-                .insert(
-                    "items",
-                    ScalarValue::Array(vec![
-                        ScalarValue::String("Item 1".to_string()),
-                        ScalarValue::String("Item 2".to_string()),
-                        ScalarValue::String("Item 3".to_string()),
-                    ]),
-                )
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("title", ScalarValue::String("Report".to_string()))
+                    .insert(
+                        "items",
+                        ScalarValue::Array(vec![
+                            ScalarValue::String("Item 1".to_string()),
+                            ScalarValue::String("Item 2".to_string()),
+                            ScalarValue::String("Item 3".to_string()),
+                        ]),
+                    ),
+            )
+            .unwrap();
 
         let template_content = r#"# {{ inputs.title }}
 
@@ -465,7 +468,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
@@ -488,13 +491,13 @@ mod tests {
 
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("filename", ScalarValue::String("dynamic".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("filename", ScalarValue::String("dynamic".to_string())),
+            )
+            .unwrap();
 
         // Output path uses template substitution
         let output_template = format!(
@@ -505,7 +508,7 @@ mod tests {
         let attrs = template_attrs("test", "content", "test", &output_template, false);
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
@@ -533,7 +536,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
@@ -680,16 +683,16 @@ mod tests {
         // Now use Pipeline::execute() pattern to actually run the template
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("name", ScalarValue::String("Factory".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("name", ScalarValue::String("Factory".to_string())),
+            )
+            .unwrap();
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("factory_test", &attrs)
             .unwrap();
@@ -709,31 +712,31 @@ mod tests {
         let mut pipeline = Pipeline::new();
 
         // Add static namespace with inputs for templates
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("site_name", ScalarValue::String("My Site".to_string()))
-                .insert("page_title", ScalarValue::String("Welcome".to_string()))
-                .insert(
-                    "page_content",
-                    ScalarValue::String("This is the main content.".to_string()),
-                )
-                .insert(
-                    "nav_items",
-                    ScalarValue::Array(vec![
-                        ObjectBuilder::new()
-                            .insert("url", "/")
-                            .insert("label", "Home")
-                            .build_scalar(),
-                        ObjectBuilder::new()
-                            .insert("url", "/about")
-                            .insert("label", "About")
-                            .build_scalar(),
-                    ]),
-                )
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("site_name", ScalarValue::String("My Site".to_string()))
+                    .insert("page_title", ScalarValue::String("Welcome".to_string()))
+                    .insert(
+                        "page_content",
+                        ScalarValue::String("This is the main content.".to_string()),
+                    )
+                    .insert(
+                        "nav_items",
+                        ScalarValue::Array(vec![
+                            ObjectBuilder::new()
+                                .insert("url", "/")
+                                .insert("label", "Home")
+                                .build_scalar(),
+                            ObjectBuilder::new()
+                                .insert("url", "/about")
+                                .insert("label", "About")
+                                .build_scalar(),
+                        ]),
+                    ),
+            )
+            .unwrap();
 
         // Use template_glob to load all templates from fixtures/tera/
         let glob_pattern = fixtures_dir()
@@ -751,7 +754,7 @@ mod tests {
             .build_hashmap();
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("glob_test", &attrs)
             .unwrap();
@@ -808,22 +811,22 @@ mod tests {
         let mut pipeline = Pipeline::new();
 
         // Add static namespace with inputs
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert(
-                    "site_name",
-                    ScalarValue::String("Combined Test".to_string()),
-                )
-                .insert("page_title", ScalarValue::String("Custom Page".to_string()))
-                .insert(
-                    "custom_footer",
-                    ScalarValue::String("Custom footer text".to_string()),
-                )
-                .insert("nav_items", ScalarValue::Array(vec![]))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert(
+                        "site_name",
+                        ScalarValue::String("Combined Test".to_string()),
+                    )
+                    .insert("page_title", ScalarValue::String("Custom Page".to_string()))
+                    .insert(
+                        "custom_footer",
+                        ScalarValue::String("Custom footer text".to_string()),
+                    )
+                    .insert("nav_items", ScalarValue::Array(vec![])),
+            )
+            .unwrap();
 
         let glob_pattern = fixtures_dir()
             .join("tera")
@@ -860,7 +863,7 @@ mod tests {
             .build_hashmap();
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<TemplateCommand>("combined_test", &attrs)
             .unwrap();

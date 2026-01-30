@@ -4,8 +4,8 @@ pub mod iterative;
 #[cfg(test)]
 pub mod tests;
 
-// Sealed module to prevent external construction of Namespace
-pub(in crate::namespace) mod sealed {
+// Sealed module to prevent external construction of Namespace (lol how obvious is it I've just learn about generics)
+pub(crate) mod sealed {
     pub struct BuilderToken(pub(super) ());
     #[doc(hidden)]
     pub struct Once(());
@@ -13,6 +13,10 @@ pub(in crate::namespace) mod sealed {
     pub struct Iterative(());
     #[doc(hidden)]
     pub struct Static(());
+    #[doc(hidden)]
+    pub trait Build {
+        fn build(self) -> super::Result<super::Namespace>; // Cooked w this one
+    }
 }
 
 /*
@@ -31,6 +35,7 @@ pub const RESERVED_NAMESPACES: [&str; 2] = [DEFAULT_ITER_VAR, DEFAULT_INDEX_VAR]
     * ExecutionMode - Enum representing the execution mode of a namespace (Once, Iterative, Static)
     * IteratorType - Enum representing the type of iterator for iterative namespaces
     * NamespaceBuilder - Builder pattern for constructing Namespace instances
+    * NamespaceHandle - Handle for adding commands to a specific namespace
 */
 #[derive(Debug, Clone)]
 pub struct Namespace {
@@ -95,6 +100,32 @@ pub struct NamespaceBuilder<T> {
     _marker: std::marker::PhantomData<T>,
 }
 
+pub struct NamespaceHandle<'a, T> {
+    pub(crate) commands: &'a mut Pipeline,
+    pub(crate) namespace_index: usize,
+    pub(crate) _marker: std::marker::PhantomData<T>,
+}
+
+impl<'a> NamespaceHandle<'a, sealed::Once> {
+    pub fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
+    where
+        T: Command,
+    {
+        self.commands
+            .add_command::<T>(self.namespace_index, name, attrs)
+    }
+}
+
+impl<'a> NamespaceHandle<'a, sealed::Iterative> {
+    pub fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
+    where
+        T: Command,
+    {
+        self.commands
+            .add_command::<T>(self.namespace_index, name, attrs)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum IteratorType {
     ScalarStringSplit {
@@ -116,6 +147,11 @@ pub enum IteratorType {
 mod once {
     use super::sealed;
     use super::*;
+    impl sealed::Build for NamespaceBuilder<sealed::Once> {
+        fn build(self) -> Result<Namespace> {
+            NamespaceBuilder::<sealed::Once>::build(self)
+        }
+    }
     impl NamespaceBuilder<sealed::Once> {
         pub fn new(name: &str) -> Self {
             NamespaceBuilder {
@@ -128,7 +164,7 @@ mod once {
                 _marker: std::marker::PhantomData,
             }
         }
-        pub fn build(self) -> Result<Namespace> {
+        fn build(self) -> Result<Namespace> {
             if RESERVED_NAMESPACES.contains(&self.name.as_str()) {
                 return Err(anyhow::anyhow!(
                     "Namespace name '{}' is reserved",
@@ -169,8 +205,13 @@ mod once {
 mod static_ns {
     use super::sealed;
     use super::*;
+    impl sealed::Build for NamespaceBuilder<sealed::Static> {
+        fn build(self) -> Result<Namespace> {
+            NamespaceBuilder::<sealed::Static>::build(self)
+        }
+    }
     impl NamespaceBuilder<sealed::Static> {
-        pub fn build(self) -> Result<Namespace> {
+        fn build(self) -> Result<Namespace> {
             let values = self
                 .values
                 .ok_or_else(|| anyhow::anyhow!("values are required for static namespace"))?;

@@ -40,20 +40,38 @@ static CONDITIONCOMMAND_ATTRIBUTES: LazyLock<Vec<AttributeSpec<&'static str>>> =
     });
 
 const CONDITIONCOMMAND_OUTPUTS: &[ResultSpec<&'static str>] = &[
-    ResultSpec {
+    // ResultSpec {
+    //     name: "result",
+    //     ty: TypeDef::Scalar(ScalarType::String),
+    //     hint: Some("The value from the matched branch or default."),
+    // },
+    // ResultSpec {
+    //     name: "matched",
+    //     ty: TypeDef::Scalar(ScalarType::Bool),
+    //     hint: Some("Whether a branch condition matched (false if default was used)."),
+    // },
+    // ResultSpec {
+    //     name: "branch_index",
+    //     ty: TypeDef::Scalar(ScalarType::Number),
+    //     hint: Some("Index of the matched branch (0-based), or -1 if default was used."),
+    // },
+    ResultSpec::Field {
         name: "result",
         ty: TypeDef::Scalar(ScalarType::String),
         hint: Some("The value from the matched branch or default."),
+        kind: ResultKind::Data,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "matched",
         ty: TypeDef::Scalar(ScalarType::Bool),
         hint: Some("Whether a branch condition matched (false if default was used)."),
+        kind: ResultKind::Data,
     },
-    ResultSpec {
+    ResultSpec::Field {
         name: "branch_index",
         ty: TypeDef::Scalar(ScalarType::Number),
         hint: Some("Index of the matched branch (0-based), or -1 if default was used."),
+        kind: ResultKind::Data,
     },
 ];
 
@@ -118,7 +136,7 @@ impl Descriptor for ConditionCommand {
     fn command_attributes() -> &'static [AttributeSpec<&'static str>] {
         &CONDITIONCOMMAND_ATTRIBUTES
     }
-    fn expected_outputs() -> &'static [ResultSpec<&'static str>] {
+    fn command_results() -> &'static [ResultSpec<&'static str>] {
         CONDITIONCOMMAND_OUTPUTS
     }
 }
@@ -155,7 +173,7 @@ impl FromAttributes for ConditionCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::imports::*;
+    use crate::test_utils::init_tracing;
 
     fn make_branch(condition: &str, then_value: &str) -> Branch {
         Branch {
@@ -221,13 +239,13 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("status", ScalarValue::String("active".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("active".to_string())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![
@@ -238,7 +256,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -256,13 +274,13 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("status", ScalarValue::String("pending".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("pending".to_string())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![
@@ -273,7 +291,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -291,13 +309,13 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("status", ScalarValue::String("unknown".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("unknown".to_string())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![
@@ -308,7 +326,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -326,13 +344,13 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("status", ScalarValue::String("unknown".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("unknown".to_string())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![make_branch("inputs.status == 'active'", "User is active")],
@@ -340,7 +358,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -358,14 +376,14 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("name", ScalarValue::String("Alice".to_string()))
-                .insert("count", ScalarValue::Number(42.into()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("name", ScalarValue::String("Alice".to_string()))
+                    .insert("count", ScalarValue::Number(42.into())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![make_branch(
@@ -376,7 +394,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -393,13 +411,13 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("status", ScalarValue::String("weird".to_string()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("weird".to_string())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![make_branch("inputs.status == 'active'", "Active")],
@@ -407,7 +425,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -424,13 +442,13 @@ mod tests {
         init_tracing();
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("score", ScalarValue::Number(85.into()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("score", ScalarValue::Number(85.into())),
+            )
+            .unwrap();
 
         let attrs = condition_attrs(
             vec![
@@ -442,7 +460,7 @@ mod tests {
         );
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -463,7 +481,7 @@ mod tests {
         let attrs = condition_attrs(vec![], Some("No branches defined"));
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
@@ -522,16 +540,16 @@ mod tests {
         // Now use Pipeline::execute() pattern to actually run
         let mut pipeline = Pipeline::new();
 
-        pipeline.add_namespace(
-            NamespaceBuilder::new("inputs")
-                .static_ns()
-                .insert("value", ScalarValue::Number(25.into()))
-                .build()
-                .unwrap(),
-        );
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("value", ScalarValue::Number(25.into())),
+            )
+            .unwrap();
 
         pipeline
-            .add_namespace(NamespaceBuilder::new("exec").build().unwrap())
+            .add_namespace(NamespaceBuilder::new("exec"))
             .unwrap()
             .add_command::<ConditionCommand>("factory_test", &attrs)
             .unwrap();
