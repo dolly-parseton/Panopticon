@@ -21,14 +21,19 @@ async fn main() -> anyhow::Result<()> {
     let file_attrs = ObjectBuilder::new()
         .insert(
             "files",
-            ScalarValue::Array(vec![ObjectBuilder::new()
-                .insert("name", "products")
-                .insert(
-                    "file",
-                    fixtures_dir().join("products.csv").to_string_lossy().to_string(),
-                )
-                .insert("format", "csv")
-                .build_scalar()]),
+            ScalarValue::Array(vec![
+                ObjectBuilder::new()
+                    .insert("name", "products")
+                    .insert(
+                        "file",
+                        fixtures_dir()
+                            .join("products.csv")
+                            .to_string_lossy()
+                            .to_string(),
+                    )
+                    .insert("format", "csv")
+                    .build_scalar(),
+            ]),
         )
         .build_hashmap();
 
@@ -122,7 +127,11 @@ async fn main() -> anyhow::Result<()> {
     for entry in std::fs::read_dir(output_dir.path())? {
         let entry = entry?;
         let meta = entry.metadata()?;
-        println!("  {} ({} bytes)", entry.file_name().to_string_lossy(), meta.len());
+        println!(
+            "  {} ({} bytes)",
+            entry.file_name().to_string_lossy(),
+            meta.len()
+        );
     }
 
     Ok(())
