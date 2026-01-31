@@ -8,19 +8,19 @@ use crate::imports::*;
     * extract_from_value - Helper function to extract dependencies from a ScalarValue based on its TypeDef
     * extract_from_scalar - Helper function to extract dependencies from a ScalarValue based on ReferenceKind
 */
-pub fn extract_dependencies_from_spec(
+pub(crate) fn extract_dependencies_from_spec(
     attrs: &Attributes,
     specs: &[AttributeSpec<&'static str>],
-) -> HashSet<StorePath> {
+) -> Result<HashSet<StorePath>> {
     let mut deps = HashSet::new();
 
     for spec in specs {
         if let Some(value) = attrs.get(spec.name) {
-            extract_from_value(value, &spec.ty, spec.reference_kind.clone(), &mut deps);
+            extract_from_value(value, &spec.ty, spec.reference_kind.clone(), &mut deps)?;
         }
     }
 
-    deps
+    Ok(deps)
 }
 
 fn extract_from_value(
@@ -28,15 +28,15 @@ fn extract_from_value(
     ty: &TypeDef<&'static str>,
     reference_kind: ReferenceKind,
     deps: &mut HashSet<StorePath>,
-) {
+) -> Result<()> {
     match ty {
         TypeDef::Scalar(_) | TypeDef::Tabular => {
-            extract_from_scalar(value, &reference_kind, deps);
+            extract_from_scalar(value, &reference_kind, deps)?;
         }
         TypeDef::ArrayOf(inner_ty) => {
             if let Some(arr) = value.as_array() {
                 for item in arr {
-                    extract_from_value(item, inner_ty, reference_kind.clone(), deps);
+                    extract_from_value(item, inner_ty, reference_kind.clone(), deps)?;
                 }
             }
         }
@@ -49,30 +49,31 @@ fn extract_from_value(
                             &field_spec.ty,
                             field_spec.reference_kind.clone(),
                             deps,
-                        );
+                        )?;
                     }
                 }
             }
         }
     }
+    Ok(())
 }
 
 fn extract_from_scalar(
     value: &ScalarValue,
     reference_kind: &ReferenceKind,
     deps: &mut HashSet<StorePath>,
-) {
+) -> Result<()> {
     use crate::dependencies::parser;
     match reference_kind {
         ReferenceKind::StaticTeraTemplate => {
             if let Some(s) = value.as_str() {
-                parser::parse_template_dependencies(s, deps);
+                parser::parse_template_dependencies(s, deps)?;
             }
         }
         ReferenceKind::RuntimeTeraTemplate => {
             if let Some(s) = value.as_str() {
                 let template = format!("{{{{ {} }}}}", s);
-                parser::parse_template_dependencies(&template, deps);
+                parser::parse_template_dependencies(&template, deps)?;
             }
         }
         ReferenceKind::StorePath => {
@@ -82,6 +83,7 @@ fn extract_from_scalar(
         }
         ReferenceKind::Unsupported => {}
     }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -132,7 +134,7 @@ mod tests {
             .insert("query", "SELECT * FROM {{ inputs.table }}")
             .build_hashmap();
 
-        let deps = extract_dependencies_from_spec(&attrs, &specs);
+        let deps = extract_dependencies_from_spec(&attrs, &specs).unwrap();
 
         assert_eq!(deps.len(), 1);
         assert!(deps.contains(&StorePath::from_dotted("inputs.table")));
@@ -145,7 +147,7 @@ mod tests {
             .insert("condition", "inputs.count > 10")
             .build_hashmap();
 
-        let deps = extract_dependencies_from_spec(&attrs, &specs);
+        let deps = extract_dependencies_from_spec(&attrs, &specs).unwrap();
 
         assert_eq!(deps.len(), 1);
         assert!(deps.contains(&StorePath::from_dotted("inputs.count")));
@@ -158,7 +160,7 @@ mod tests {
             .insert("source", "loader.users.data")
             .build_hashmap();
 
-        let deps = extract_dependencies_from_spec(&attrs, &specs);
+        let deps = extract_dependencies_from_spec(&attrs, &specs).unwrap();
 
         assert_eq!(deps.len(), 1);
         assert!(deps.contains(&StorePath::from_dotted("loader.users.data")));
@@ -171,7 +173,7 @@ mod tests {
             .insert("label", "{{ this.should.not.extract }}")
             .build_hashmap();
 
-        let deps = extract_dependencies_from_spec(&attrs, &specs);
+        let deps = extract_dependencies_from_spec(&attrs, &specs).unwrap();
 
         assert!(deps.is_empty());
     }
@@ -186,7 +188,7 @@ mod tests {
             .insert("label", "ignored")
             .build_hashmap();
 
-        let deps = extract_dependencies_from_spec(&attrs, &specs);
+        let deps = extract_dependencies_from_spec(&attrs, &specs).unwrap();
 
         assert_eq!(deps.len(), 4);
         assert!(deps.contains(&StorePath::from_dotted("inputs.col")));
@@ -237,7 +239,7 @@ mod tests {
             .insert("branches", ScalarValue::Array(vec![branch1, branch2]))
             .build_hashmap();
 
-        let deps = extract_dependencies_from_spec(&attrs, &specs);
+        let deps = extract_dependencies_from_spec(&attrs, &specs).unwrap();
 
         assert!(deps.contains(&StorePath::from_dotted("inputs.status")));
         assert!(deps.contains(&StorePath::from_dotted("inputs.name")));

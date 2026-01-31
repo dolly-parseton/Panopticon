@@ -48,7 +48,7 @@ impl Namespace {
         NamespaceBuilder::<sealed::Once>::new(name)
     }
 
-    pub fn new<T: Into<String>>(name: T, ty: ExecutionMode, _: sealed::BuilderToken) -> Self {
+    pub(crate) fn new<T: Into<String>>(name: T, ty: ExecutionMode, _: sealed::BuilderToken) -> Self {
         Namespace {
             name: name.into(),
             ty,
@@ -59,7 +59,7 @@ impl Namespace {
         &self.name
     }
 
-    pub fn ty(&self) -> &ExecutionMode {
+    pub(crate) fn ty(&self) -> &ExecutionMode {
         &self.ty
     }
 }
@@ -104,6 +104,28 @@ pub struct NamespaceHandle<'a, T> {
     pub(crate) commands: &'a mut Pipeline,
     pub(crate) namespace_index: usize,
     pub(crate) _marker: std::marker::PhantomData<T>,
+}
+
+impl<'a, T> NamespaceHandle<'a, T> {
+    pub fn namespace_index(&self) -> usize {
+        self.namespace_index
+    }
+    pub fn command_names(&self) -> impl Iterator<Item = &str> + '_ {
+        self.commands
+            .commands
+            .iter()
+            .filter(|cmd| cmd.namespace_index == self.namespace_index)
+            .map(|cmd| cmd.name.as_str())
+    }
+    pub fn namespace_name(&self) -> &str {
+        &self
+            .commands
+            .namespaces
+            .get(self.namespace_index)
+            // Probably should never fail here but just in case
+            .expect("Invalid namespace index")
+            .name
+    }
 }
 
 impl<'a> NamespaceHandle<'a, sealed::Once> {

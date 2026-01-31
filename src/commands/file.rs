@@ -1,43 +1,57 @@
 use crate::imports::*;
 use polars::prelude::SerReader;
 
-static FILECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
-    LazyLock::new(|| {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "files",
-            true,
-            Some("Array of {name, file, format} objects to read"),
-        );
+static FILECOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
+    let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+        "files",
+        true,
+        Some("Array of {name, file, format} objects to read"),
+    );
 
-        let (fields, name_ref) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Identifier for this file in the TabularStore"),
-        );
-        let fields = fields.add_template(
-            "file",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Path to the file to read (supports tera templates)"),
-            ReferenceKind::StaticTeraTemplate,
-        );
-        let fields = fields.add_template(
-            "format",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Format of the file: csv, json, or parquet (supports tera templates)"),
-            ReferenceKind::StaticTeraTemplate,
-        );
+    let (fields, name_ref) = fields.add_literal(
+        "name",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Identifier for this file in the TabularStore"),
+    );
+    let fields = fields.add_template(
+        "file",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Path to the file to read (supports tera templates)"),
+        ReferenceKind::StaticTeraTemplate,
+    );
+    let fields = fields.add_template(
+        "format",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Format of the file: csv, json, or parquet (supports tera templates)"),
+        ReferenceKind::StaticTeraTemplate,
+    );
 
-        pending
-            .finalise_attribute(fields)
-            .fixed_result("count", TypeDef::Scalar(ScalarType::Number), Some("The number of files loaded."), ResultKind::Meta)
-            .fixed_result("total_rows", TypeDef::Scalar(ScalarType::Number), Some("The total number of rows across all loaded files."), ResultKind::Meta)
-            .fixed_result("total_size", TypeDef::Scalar(ScalarType::Number), Some("The total size in bytes across all loaded files."), ResultKind::Meta)
-            .derived_result("files", name_ref, Some(TypeDef::Tabular), ResultKind::Data)
-            .build()
-    });
+    pending
+        .finalise_attribute(fields)
+        .fixed_result(
+            "count",
+            TypeDef::Scalar(ScalarType::Number),
+            Some("The number of files loaded."),
+            ResultKind::Meta,
+        )
+        .fixed_result(
+            "total_rows",
+            TypeDef::Scalar(ScalarType::Number),
+            Some("The total number of rows across all loaded files."),
+            ResultKind::Meta,
+        )
+        .fixed_result(
+            "total_size",
+            TypeDef::Scalar(ScalarType::Number),
+            Some("The total size in bytes across all loaded files."),
+            ResultKind::Meta,
+        )
+        .derived_result("files", name_ref, Some(TypeDef::Tabular), ResultKind::Data)
+        .build()
+});
 
 struct FileSpec {
     name: String,
@@ -315,7 +329,8 @@ mod tests {
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, total_size) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 1);
@@ -356,7 +371,8 @@ mod tests {
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, _) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 1);
@@ -386,7 +402,8 @@ mod tests {
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, _) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 1);
@@ -423,7 +440,8 @@ mod tests {
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, total_size) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 2);
@@ -472,7 +490,8 @@ mod tests {
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, _) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 3);
@@ -492,7 +511,8 @@ mod tests {
             .add_command::<FileCommand>("load", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, total_size) = get_summary(&context, "exec", "load").await;
         assert_eq!(count, 0);
@@ -610,7 +630,8 @@ mod tests {
             .add_command::<FileCommand>("factory_test", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (count, total_rows, _) = get_summary(&context, "exec", "factory_test").await;
         assert_eq!(count, 1);

@@ -15,23 +15,32 @@ pub struct CommandSpec {
 }
 
 impl CommandSpec {
-    pub fn new<T: Command>(namespace_index: usize, name: String, attributes: Attributes) -> Self {
-        let dependencies = T::extract_dependencies(&attributes);
-        CommandSpec {
+    pub fn new<T: Command>(
+        namespace_index: usize,
+        name: String,
+        attributes: Attributes,
+    ) -> Result<Self> {
+        let dependencies = T::extract_dependencies(&attributes)?;
+        Ok(CommandSpec {
             namespace_index,
             name,
             attributes,
             builder: T::factory(),
-            exepected_attributes: T::command_attributes()
-                .iter()
+            exepected_attributes: T::available_attributes()
+                .into_iter()
                 .map(|attr| AttributeSpec::<String>::from(attr.clone()))
                 .collect(),
-            expected_results: T::command_results()
-                .iter()
+            expected_results: T::available_results()
+                .into_iter()
                 .map(|res| ResultSpec::<String>::from(res.clone()))
                 .collect(),
             dependencies,
-        }
+        })
+    }
+
+    pub(crate) fn validate_attributes(&self) -> Result<()> {
+        use crate::pipeline::validation::validate_attributes;
+        validate_attributes(&self.attributes, &self.exepected_attributes)
     }
 
     // NOT SURE IF THIS SHOULD BE PUBLIC OR NOT - Todo consider later

@@ -15,11 +15,20 @@ pub enum ResultSpec<T: Into<String>> {
         kind: ResultKind,
     },
     DerivedFromSingleAttribute {
-        attribute: T,                   // The name of the AttributeSpec this result is derived from
+        attribute: T, // The name of the AttributeSpec this result is derived from
         name_field: LiteralFieldRef<T>, // Compile-time proof that the source field is literal
-        ty: Option<TypeDef<T>>,         // None = inferred from runtime value
+        ty: Option<TypeDef<T>>, // None = inferred from runtime value
         kind: ResultKind,
     },
+}
+
+impl<T: Into<String>> ResultSpec<T> {
+    pub fn type_def(&self) -> Option<&TypeDef<T>> {
+        match self {
+            ResultSpec::Field { ty, .. } => Some(ty),
+            ResultSpec::DerivedFromSingleAttribute { ty, .. } => ty.as_ref(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]

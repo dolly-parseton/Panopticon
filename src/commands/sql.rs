@@ -1,43 +1,57 @@
 use crate::imports::*;
 use polars::prelude::IntoLazy;
 
-static SQLCOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
-    LazyLock::new(|| {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "tables",
-            true,
-            Some("Array of {name, source} objects mapping table names to stored data"),
-        );
+static SQLCOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
+    let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+        "tables",
+        true,
+        Some("Array of {name, source} objects mapping table names to stored data"),
+    );
 
-        let (fields, _) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Table name to use in SQL query"),
-        );
-        let fields = fields.add_template(
-            "source",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Path to tabular data in store (e.g., 'load.users.data')"),
-            ReferenceKind::StorePath,
-        );
+    let (fields, _) = fields.add_literal(
+        "name",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Table name to use in SQL query"),
+    );
+    let fields = fields.add_template(
+        "source",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Path to tabular data in store (e.g., 'load.users.data')"),
+        ReferenceKind::StorePath,
+    );
 
-        pending
-            .finalise_attribute(fields)
-            .attribute(AttributeSpec {
-                name: "query",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: Some("SQL query to execute (supports Tera substitution)"),
-                default_value: None,
-                reference_kind: ReferenceKind::StaticTeraTemplate,
-            })
-            .fixed_result("data", TypeDef::Tabular, Some("The query result as a DataFrame"), ResultKind::Data)
-            .fixed_result("rows", TypeDef::Scalar(ScalarType::Number), Some("Number of rows in the result"), ResultKind::Meta)
-            .fixed_result("columns", TypeDef::Scalar(ScalarType::Array), Some("Column names in the result"), ResultKind::Meta)
-            .build()
-    });
+    pending
+        .finalise_attribute(fields)
+        .attribute(AttributeSpec {
+            name: "query",
+            ty: TypeDef::Scalar(ScalarType::String),
+            required: true,
+            hint: Some("SQL query to execute (supports Tera substitution)"),
+            default_value: None,
+            reference_kind: ReferenceKind::StaticTeraTemplate,
+        })
+        .fixed_result(
+            "data",
+            TypeDef::Tabular,
+            Some("The query result as a DataFrame"),
+            ResultKind::Data,
+        )
+        .fixed_result(
+            "rows",
+            TypeDef::Scalar(ScalarType::Number),
+            Some("Number of rows in the result"),
+            ResultKind::Meta,
+        )
+        .fixed_result(
+            "columns",
+            TypeDef::Scalar(ScalarType::Array),
+            Some("Column names in the result"),
+            ResultKind::Meta,
+        )
+        .build()
+});
 
 struct TableMapping {
     name: String,
@@ -268,7 +282,8 @@ mod tests {
             .add_command::<SqlCommand>("all_users", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (rows, columns) = get_results(&context, "query", "all_users").await;
         assert_eq!(rows, 3);
@@ -349,7 +364,8 @@ mod tests {
             .add_command::<SqlCommand>("stats", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (rows, columns) = get_results(&context, "query", "stats").await;
         assert_eq!(rows, 1); // Single aggregation row
@@ -463,7 +479,8 @@ mod tests {
             .add_command::<SqlCommand>("filtered", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         // Query should have filtered based on inputs.min_age
         let prefix = StorePath::from_segments(["query", "filtered", "data"]);

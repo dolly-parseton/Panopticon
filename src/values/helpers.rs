@@ -211,6 +211,7 @@ pub fn is_truthy(value: &ScalarValue) -> bool {
     }
 }
 
+#[allow(unused)]
 pub mod to_scalar {
     use crate::imports::*;
     /*

@@ -14,7 +14,10 @@ struct TeraParser;
     skip_all,
     fields(template_hash, initial_count, final_count)
 )]
-pub fn parse_template_dependencies(template: &str, dependencies: &mut HashSet<StorePath>) {
+pub fn parse_template_dependencies(
+    template: &str,
+    dependencies: &mut HashSet<StorePath>,
+) -> Result<()> {
     if tracing::enabled!(tracing::Level::DEBUG) {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -25,13 +28,19 @@ pub fn parse_template_dependencies(template: &str, dependencies: &mut HashSet<St
     }
 
     let parse_result = TeraParser::parse(Rule::template, template);
-    if let Ok(pairs) = parse_result {
-        extract_identifiers_recursive(pairs, dependencies);
-    }
+    let pairs = match parse_result {
+        Ok(pairs) => pairs,
+        Err(e) => {
+            return Err(anyhow::anyhow!("Template parsing error: {}", e));
+        }
+    };
+    extract_identifiers_recursive(pairs, dependencies);
 
     if tracing::enabled!(tracing::Level::DEBUG) {
         tracing::Span::current().record("final_count", dependencies.len());
     }
+
+    Ok(())
 }
 
 fn extract_identifiers_recursive<'a>(
@@ -62,7 +71,7 @@ mod tests {
         "#;
 
         let mut vars = HashSet::new();
-        parse_template_dependencies(template, &mut vars);
+        parse_template_dependencies(template, &mut vars).unwrap();
         println!("Extracted variables: {:?}", vars);
         let expected_vars: HashSet<StorePath> = [
             StorePath::from_dotted("name"),

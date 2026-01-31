@@ -1,27 +1,26 @@
 use crate::imports::*;
 
-static TEMPLATECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
-    LazyLock::new(|| {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "templates",
-            false,
-            Some("Array of template definitions. Can be combined with 'template_glob'"),
-        );
+static TEMPLATECOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
+    let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+        "templates",
+        false,
+        Some("Array of template definitions. Can be combined with 'template_glob'"),
+    );
 
-        let (fields, _) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Name to register the template under"),
-        );
-        let fields = fields.add_template(
-            "content",
-            TypeDef::Scalar(ScalarType::String),
-            false,
-            Some("Raw template content (mutually exclusive with 'file')"),
-            ReferenceKind::StaticTeraTemplate,
-        );
-        let fields = fields.add_template(
+    let (fields, _) = fields.add_literal(
+        "name",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Name to register the template under"),
+    );
+    let fields = fields.add_template(
+        "content",
+        TypeDef::Scalar(ScalarType::String),
+        false,
+        Some("Raw template content (mutually exclusive with 'file')"),
+        ReferenceKind::StaticTeraTemplate,
+    );
+    let fields = fields.add_template(
             "file",
             TypeDef::Scalar(ScalarType::String),
             false,
@@ -29,7 +28,7 @@ static TEMPLATECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<Res
             ReferenceKind::StaticTeraTemplate,
         );
 
-        pending
+    pending
             .finalise_attribute(fields)
             .attribute(AttributeSpec {
                 name: "template_glob",
@@ -65,9 +64,9 @@ static TEMPLATECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<Res
             })
             .fixed_result("line_count", TypeDef::Scalar(ScalarType::Number), Some("Number of lines in the rendered output"), ResultKind::Meta)
             .fixed_result("size", TypeDef::Scalar(ScalarType::Number), Some("Size in bytes of the rendered output"), ResultKind::Meta)
-            .fixed_result("content", TypeDef::Scalar(ScalarType::String), Some("The rendered content (only populated when 'capture' is true, otherwise empty)"), ResultKind::Meta)
+            .fixed_result("content", TypeDef::Scalar(ScalarType::String), Some("The rendered content (only populated when 'capture' is true, otherwise empty)"), ResultKind::Data)
             .build()
-    });
+});
 
 #[derive(Debug)]
 enum TemplateSource {
@@ -356,7 +355,8 @@ mod tests {
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (line_count, size, content) = get_results(&context, "exec", "render").await;
         assert_eq!(line_count, 1);
@@ -396,7 +396,8 @@ mod tests {
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (_, _, content) = get_results(&context, "exec", "render").await;
         assert_eq!(content, Some("The answer is 42".to_string()));
@@ -446,7 +447,8 @@ mod tests {
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (line_count, _, content) = get_results(&context, "exec", "render").await;
         assert!(line_count >= 5);
@@ -486,7 +488,7 @@ mod tests {
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
 
-        pipeline.execute().await.unwrap();
+        pipeline.compile().unwrap().execute().await.unwrap();
 
         let expected_path = temp_dir.path().join("dynamic.txt");
         assert!(expected_path.exists());
@@ -514,7 +516,7 @@ mod tests {
             .add_command::<TemplateCommand>("render", &attrs)
             .unwrap();
 
-        pipeline.execute().await.unwrap();
+        pipeline.compile().unwrap().execute().await.unwrap();
         assert!(output_path.exists());
     }
 
@@ -670,7 +672,7 @@ mod tests {
             .add_command::<TemplateCommand>("factory_test", &attrs)
             .unwrap();
 
-        pipeline.execute().await.unwrap();
+        pipeline.compile().unwrap().execute().await.unwrap();
 
         let file_content: String = tokio::fs::read_to_string(&output_path).await.unwrap();
         assert_eq!(file_content, "Hello, Factory!");
@@ -732,7 +734,8 @@ mod tests {
             .add_command::<TemplateCommand>("glob_test", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (line_count, size, content) = get_results(&context, "exec", "glob_test").await;
         let content = content.expect("Content should be captured");
@@ -841,7 +844,8 @@ mod tests {
             .add_command::<TemplateCommand>("combined_test", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
 
         let (_, _, content) = get_results(&context, "exec", "combined_test").await;
         let content = content.expect("Content should be captured");

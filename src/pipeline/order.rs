@@ -1,9 +1,9 @@
 use crate::imports::*;
 
 pub struct ExecutionGroup<'a> {
-    pub namespace: &'a Namespace,
-    pub namespace_index: usize,
-    pub commands: Vec<&'a CommandSpec>,
+    pub(crate) namespace: &'a Namespace,
+    pub(crate) namespace_index: usize,
+    pub(crate) commands: Vec<&'a CommandSpec>,
 }
 
 pub struct ExecutionPlan<'a> {

@@ -1,6 +1,6 @@
 use crate::imports::*;
 
-use super::{extract_object_fields, LiteralFieldRef, ObjectFields};
+use super::{LiteralFieldRef, ObjectFields, extract_object_fields};
 
 // Uses some generics magic to compile time safety for certain spec edge cases.
 
@@ -15,12 +15,18 @@ pub struct CommandSpecBuilder<T: Into<String>> {
     results: Vec<ResultSpec<T>>,
 }
 
-impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> CommandSpecBuilder<T> {
-    pub fn new() -> Self {
+impl<T: Into<String>> Default for CommandSpecBuilder<T> {
+    fn default() -> Self {
         Self {
             attributes: vec![],
             results: vec![],
         }
+    }
+}
+
+impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> CommandSpecBuilder<T> {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn attribute(mut self, spec: AttributeSpec<T>) -> Self {

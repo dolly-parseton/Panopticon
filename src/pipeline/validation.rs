@@ -10,7 +10,7 @@ use crate::imports::*;
     * validate_object - Validates a ScalarValue object against a list of FieldSpecs
 */
 #[tracing::instrument(skip(attrs, specs), fields(attr_count = attrs.len()))]
-pub fn validate_attributes<'a, T, I>(attrs: &Attributes, specs: I) -> Result<()>
+pub(crate) fn validate_attributes<'a, T, I>(attrs: &Attributes, specs: I) -> Result<()>
 where
     T: Into<String> + Clone + 'a,
     I: IntoIterator<Item = &'a AttributeSpec<T>>,
@@ -23,6 +23,7 @@ where
             Some(value) => {
                 tracing::debug!(attribute = %name, required = spec.required, "Validating attribute");
                 validate_value(value, &spec.ty, &name)?;
+                validate_reference(value, &spec.reference_kind, &name)?; // Parses tera syntax if applicable
             }
             None if spec.required => {
                 tracing::debug!(attribute = %name, "Missing required attribute");
@@ -109,6 +110,7 @@ fn validate_object<T: Into<String> + Clone>(
             Some(value) => {
                 tracing::debug!(field = %field_path, required = field.required, "Validating object field");
                 validate_value(value, &field.ty, &field_path)?;
+                validate_reference(value, &field.reference_kind, &field_path)?;
             }
             None if field.required => {
                 tracing::debug!(field = %field_path, "Missing required field");
@@ -118,6 +120,38 @@ fn validate_object<T: Into<String> + Clone>(
                 tracing::debug!(field = %field_path, "Optional field not present, skipping");
             }
         }
+    }
+    Ok(())
+}
+
+// Checks tera syntax is valid where it's applied.
+fn validate_reference(
+    value: &ScalarValue,
+    reference_kind: &ReferenceKind,
+    path: &str,
+) -> Result<()> {
+    use crate::dependencies::parser::parse_template_dependencies;
+
+    match reference_kind {
+        ReferenceKind::StaticTeraTemplate => {
+            if let Some(s) = value.as_str() {
+                let mut deps = HashSet::new();
+                parse_template_dependencies(s, &mut deps)
+                    .context(format!("Invalid template syntax in '{}'", path))?;
+            }
+        }
+        ReferenceKind::RuntimeTeraTemplate => {
+            if let Some(s) = value.as_str() {
+                let template = format!("{{{{ {} }}}}", s);
+                let mut deps = HashSet::new();
+                parse_template_dependencies(&template, &mut deps)
+                    .context(format!("Invalid conditional syntax in '{}'", path))?;
+            }
+        }
+        ReferenceKind::StorePath => {
+            // StorePath is just a dotted identifier — no template syntax to validate
+        }
+        ReferenceKind::Unsupported => {}
     }
     Ok(())
 }

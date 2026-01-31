@@ -113,9 +113,15 @@ pub struct ObjectFields<T: Into<String>> {
     fields: Vec<FieldSpec<T>>,
 }
 
+impl<T: Into<String>> Default for ObjectFields<T> {
+    fn default() -> Self {
+        Self { fields: vec![] }
+    }
+}
+
 impl<T: Into<String> + Clone> ObjectFields<T> {
     pub fn new() -> Self {
-        Self { fields: vec![] }
+        Self::default()
     }
 
     /// Add a literal field (ReferenceKind::Unsupported).

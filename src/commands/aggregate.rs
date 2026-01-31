@@ -1,47 +1,48 @@
 use crate::imports::*;
 use polars::prelude::*;
 
-static AGGREGATECOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
-    LazyLock::new(|| {
-        let builder = CommandSpecBuilder::new().attribute(AttributeSpec {
-            name: "source",
-            ty: TypeDef::Scalar(ScalarType::String),
-            required: true,
-            hint: Some("Path to tabular data in store (e.g., 'query.results.data')"),
-            default_value: None,
-            reference_kind: ReferenceKind::StorePath,
-        });
-
-        let (pending, fields) = builder.array_of_objects(
-            "aggregations",
-            true,
-            Some("Array of {name, column, op} aggregation specifications"),
-        );
-
-        let (fields, name_ref) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Output scalar name"),
-        );
-        let (fields, _) = fields.add_literal(
-            "column",
-            TypeDef::Scalar(ScalarType::String),
-            false,
-            Some("Column to aggregate (not required for 'count')"),
-        );
-        let (fields, _) = fields.add_literal(
-            "op",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Operation: sum, mean, min, max, count, first, last, std, median, n_unique, null_count"),
-        );
-
-        pending
-            .finalise_attribute(fields)
-            .derived_result("aggregations", name_ref, None, ResultKind::Data)
-            .build()
+static AGGREGATECOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
+    let builder = CommandSpecBuilder::new().attribute(AttributeSpec {
+        name: "source",
+        ty: TypeDef::Scalar(ScalarType::String),
+        required: true,
+        hint: Some("Path to tabular data in store (e.g., 'query.results.data')"),
+        default_value: None,
+        reference_kind: ReferenceKind::StorePath,
     });
+
+    let (pending, fields) = builder.array_of_objects(
+        "aggregations",
+        true,
+        Some("Array of {name, column, op} aggregation specifications"),
+    );
+
+    let (fields, name_ref) = fields.add_literal(
+        "name",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Output scalar name"),
+    );
+    let (fields, _) = fields.add_literal(
+        "column",
+        TypeDef::Scalar(ScalarType::String),
+        false,
+        Some("Column to aggregate (not required for 'count')"),
+    );
+    let (fields, _) = fields.add_literal(
+        "op",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some(
+            "Operation: sum, mean, min, max, count, first, last, std, median, n_unique, null_count",
+        ),
+    );
+
+    pending
+        .finalise_attribute(fields)
+        .derived_result("aggregations", name_ref, None, ResultKind::Data)
+        .build()
+});
 
 #[derive(Debug, Clone, Copy)]
 enum AggregateOp {

@@ -1,43 +1,57 @@
 use crate::imports::*;
 
-static CONDITIONCOMMAND_SPEC: LazyLock<(Vec<AttributeSpec<&'static str>>, Vec<ResultSpec<&'static str>>)> =
-    LazyLock::new(|| {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "branches",
-            true,
-            Some("Array of {if, then} objects evaluated in order"),
-        );
+static CONDITIONCOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
+    let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
+        "branches",
+        true,
+        Some("Array of {if, then} objects evaluated in order"),
+    );
 
-        let fields = fields.add_template(
-            "if",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Tera expression to evaluate as condition"),
-            ReferenceKind::RuntimeTeraTemplate,
-        );
-        let fields = fields.add_template(
-            "then",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            Some("Value if condition is true (supports Tera substitution)"),
-            ReferenceKind::StaticTeraTemplate,
-        );
+    let fields = fields.add_template(
+        "if",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Tera expression to evaluate as condition"),
+        ReferenceKind::RuntimeTeraTemplate,
+    );
+    let fields = fields.add_template(
+        "then",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Value if condition is true (supports Tera substitution)"),
+        ReferenceKind::StaticTeraTemplate,
+    );
 
-        pending
-            .finalise_attribute(fields)
-            .attribute(AttributeSpec {
-                name: "default",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: false,
-                hint: Some("Default value if no branch matches (supports Tera substitution)"),
-                default_value: None,
-                reference_kind: ReferenceKind::StaticTeraTemplate,
-            })
-            .fixed_result("result", TypeDef::Scalar(ScalarType::String), Some("The value from the matched branch or default."), ResultKind::Data)
-            .fixed_result("matched", TypeDef::Scalar(ScalarType::Bool), Some("Whether a branch condition matched (false if default was used)."), ResultKind::Data)
-            .fixed_result("branch_index", TypeDef::Scalar(ScalarType::Number), Some("Index of the matched branch (0-based), or -1 if default was used."), ResultKind::Data)
-            .build()
-    });
+    pending
+        .finalise_attribute(fields)
+        .attribute(AttributeSpec {
+            name: "default",
+            ty: TypeDef::Scalar(ScalarType::String),
+            required: false,
+            hint: Some("Default value if no branch matches (supports Tera substitution)"),
+            default_value: None,
+            reference_kind: ReferenceKind::StaticTeraTemplate,
+        })
+        .fixed_result(
+            "result",
+            TypeDef::Scalar(ScalarType::String),
+            Some("The value from the matched branch or default."),
+            ResultKind::Data,
+        )
+        .fixed_result(
+            "matched",
+            TypeDef::Scalar(ScalarType::Bool),
+            Some("Whether a branch condition matched (false if default was used)."),
+            ResultKind::Data,
+        )
+        .fixed_result(
+            "branch_index",
+            TypeDef::Scalar(ScalarType::Number),
+            Some("Index of the matched branch (0-based), or -1 if default was used."),
+            ResultKind::Data,
+        )
+        .build()
+});
 
 struct Branch {
     condition: String,
@@ -225,7 +239,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "User is active");
@@ -260,7 +275,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "User is pending");
@@ -295,7 +311,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "Unknown status");
@@ -327,7 +344,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "");
@@ -363,7 +381,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, _) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "Hello Alice, you have 42 items");
@@ -394,7 +413,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, _) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "Unexpected status: weird");
@@ -429,7 +449,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "B");
@@ -450,7 +471,8 @@ mod tests {
             .add_command::<ConditionCommand>("check", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, index) = get_result(&context, "exec", "check").await;
 
         assert_eq!(result, "No branches defined");
@@ -518,7 +540,8 @@ mod tests {
             .add_command::<ConditionCommand>("factory_test", &attrs)
             .unwrap();
 
-        let context = pipeline.execute().await.unwrap();
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
         let (result, matched, _) = get_result(&context, "exec", "factory_test").await;
 
         assert_eq!(result, "big number");

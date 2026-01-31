@@ -119,7 +119,7 @@ impl<T: FromAttributes + Descriptor + Executable> Command for T {}
 pub trait FromAttributes: Sized + Descriptor {
     fn from_attributes(attrs: &Attributes) -> Result<Self>;
 
-    fn extract_dependencies(attrs: &Attributes) -> std::collections::HashSet<StorePath> {
+    fn extract_dependencies(attrs: &Attributes) -> Result<std::collections::HashSet<StorePath>> {
         use crate::dependencies::helpers;
         // Todo change to use available attributes? Current approach wont consider common attributes
         helpers::extract_dependencies_from_spec(attrs, Self::command_attributes())

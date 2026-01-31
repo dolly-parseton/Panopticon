@@ -500,30 +500,36 @@ async fn test_iterative_pipeline_indexed_outputs() {
         .unwrap();
     handle.add_command::<TemplateCommand>("render", &attrs).unwrap();
 
-    let context = pipeline.execute().await.unwrap();
+    let completed = pipeline.compile().unwrap().execute().await.unwrap();
 
-    // Each iteration should have its own indexed output path
+    let results = completed
+        .results(ResultSettings {
+            output_path: temp_dir.path().to_path_buf(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    // Each iteration should have its own indexed result entry
     let prefix_0 = StorePath::from_segments(["process", "render", "0"]);
     let prefix_1 = StorePath::from_segments(["process", "render", "1"]);
 
-    let content_0 = context
-        .scalar()
-        .get(&prefix_0.with_segment("content"))
-        .await
-        .unwrap()
-        .unwrap();
-    let content_1 = context
-        .scalar()
-        .get(&prefix_1.with_segment("content"))
-        .await
-        .unwrap()
-        .unwrap();
+    let result_0 = results.get_by_source(&prefix_0).expect("missing result for iteration 0");
+    let result_1 = results.get_by_source(&prefix_1).expect("missing result for iteration 1");
 
-    assert_eq!(content_0.as_str().unwrap(), "Value: alpha");
-    assert_eq!(content_1.as_str().unwrap(), "Value: beta");
+    let content_0 = result_0
+        .data_get(&prefix_0.with_segment("content"))
+        .expect("missing content for iteration 0");
+    let content_1 = result_1
+        .data_get(&prefix_1.with_segment("content"))
+        .expect("missing content for iteration 1");
+
+    let (_, value_0) = content_0.as_scalar().unwrap();
+    let (_, value_1) = content_1.as_scalar().unwrap();
+    assert_eq!(value_0.as_str().unwrap(), "Value: alpha");
+    assert_eq!(value_1.as_str().unwrap(), "Value: beta");
 
     // Verify the old non-indexed path does NOT exist (no overwrite at root)
-    let old_path = StorePath::from_segments(["process", "render", "content"]);
-    let old_result = context.scalar().get(&old_path).await.unwrap();
-    assert!(old_result.is_none());
+    let non_indexed = StorePath::from_segments(["process", "render"]);
+    assert!(results.get_by_source(&non_indexed).is_none());
 }
