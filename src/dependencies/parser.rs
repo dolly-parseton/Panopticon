@@ -35,30 +35,92 @@ fn extract_identifiers_recursive<'a>(
     }
 }
 
-// TODO - Expand test coverage
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_context_dependencies() {
+    fn dotted_identifiers() {
         let template = r#"
-            Hello, {{ name }}!
-            Your age is {{ age }}.
-            {% if is_member %}
-                Welcome back, member!
-            {% endif %}
+        Hello {{ user.name }}!
+        Your order {{ order.id }} is confirmed.
+        {% for item in order.items %}
+            - {{ item.name }}: {{ item.price }}
+        {% endfor %}
         "#;
-        let mut vars = HashSet::new();
-        parse_template_dependencies(template, &mut vars).unwrap();
-        println!("Extracted variables: {:?}", vars);
-        let expected_vars: HashSet<StorePath> = [
-            StorePath::from_dotted("name"),
-            StorePath::from_dotted("age"),
-            StorePath::from_dotted("is_member"),
+
+        let mut dependencies = HashSet::new();
+        parse_template_dependencies(template, &mut dependencies).unwrap();
+
+        let expected: HashSet<StorePath> = vec![
+            StorePath::from_dotted("user.name"),
+            StorePath::from_dotted("order.id"),
+            StorePath::from_dotted("order.items"),
+            StorePath::from_dotted("item.name"),
+            StorePath::from_dotted("item.price"),
         ]
         .into_iter()
         .collect();
-        assert_eq!(vars, expected_vars);
+
+        assert_eq!(dependencies, expected);
+    }
+
+    #[test]
+    fn nested_expressions() {
+        let template = r#"
+        {% if user.is_active and user.age > 18 %}
+            Welcome back, {{ user.name }}!
+        {% else %}
+            Please activate your account.
+        {% endif %}
+        "#;
+
+        let mut dependencies = HashSet::new();
+        parse_template_dependencies(template, &mut dependencies).unwrap();
+        let expected: HashSet<StorePath> = vec![
+            StorePath::from_dotted("user.is_active"),
+            StorePath::from_dotted("user.age"),
+            StorePath::from_dotted("user.name"),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(dependencies, expected);
+    }
+
+    #[test]
+    fn filter_expressions() {
+        let template = r#"
+        {{ products | filter(attribute="category", value="electronics") | map(attribute="price") | sum }}
+        "#;
+
+        let mut dependencies = HashSet::new();
+        parse_template_dependencies(template, &mut dependencies).unwrap();
+        let expected: HashSet<StorePath> = vec![StorePath::from_dotted("products")]
+            .into_iter()
+            .collect();
+
+        assert_eq!(dependencies, expected);
+    }
+
+    #[test]
+    fn for_loops() {
+        let template = r#"
+        {% for user in users %}
+            {{ user.name }} - {{ user.email }}
+        {% endfor %}
+        "#;
+
+        let mut dependencies = HashSet::new();
+        parse_template_dependencies(template, &mut dependencies).unwrap();
+        let expected: HashSet<StorePath> = vec![
+            StorePath::from_dotted("users"),
+            StorePath::from_dotted("user.name"),
+            StorePath::from_dotted("user.email"),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_eq!(dependencies, expected);
     }
 }

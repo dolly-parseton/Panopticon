@@ -23,6 +23,16 @@ pub struct Pipeline<T = Draft> {
     state: T,
 }
 
+impl Default for Pipeline<Draft> {
+    fn default() -> Self {
+        Pipeline {
+            namespaces: Vec::new(),
+            commands: Vec::new(),
+            state: Draft,
+        }
+    }
+}
+
 impl<T> Pipeline<T> {
     // Returns an iterator of namespace and command name pairs
     fn command_ns_pairs_iter(&self) -> impl Iterator<Item = (&str, &str)> + '_ {
