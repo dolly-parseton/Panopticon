@@ -86,14 +86,6 @@ pub struct TemplateCommand {
 #[async_trait::async_trait]
 impl Executable for TemplateCommand {
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
-        tracing::info!(
-            template_count = self.templates.len(),
-            has_glob = self.template_glob.is_some(),
-            render = %self.render,
-            capture = self.capture,
-            "Executing TemplateCommand"
-        );
-
         // Build the Tera instance
         let mut tera = match &self.template_glob {
             Some(glob) => tera::Tera::new(glob).map_err(|e| {
@@ -106,14 +98,13 @@ impl Executable for TemplateCommand {
         for template_source in &self.templates {
             match template_source {
                 TemplateSource::Raw { name, content } => {
-                    tracing::debug!(name = %name, "Adding raw template");
                     tera.add_raw_template(name, content).map_err(|e| {
                         anyhow::anyhow!("Failed to add raw template '{}': {}", name, e)
                     })?;
                 }
                 TemplateSource::File { name, path } => {
-                    tracing::debug!(name = %name, path = %path.display(), "Adding template from file");
                     if !path.exists() {
+                        tracing::warn!(path = %path.display(), "Template file does not exist");
                         return Err(anyhow::anyhow!(
                             "Template file does not exist: {}",
                             path.display()
@@ -168,13 +159,6 @@ impl Executable for TemplateCommand {
         // Calculate metrics
         let size = rendered.len() as u64;
         let line_count = rendered.lines().count() as i64;
-
-        tracing::info!(
-            output = %output_path.display(),
-            size = size,
-            line_count = line_count,
-            "Template rendered successfully"
-        );
 
         // Store results
         let out = InsertBatch::new(context, output_prefix);

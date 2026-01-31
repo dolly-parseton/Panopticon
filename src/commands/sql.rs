@@ -66,29 +66,18 @@ pub struct SqlCommand {
 #[async_trait::async_trait]
 impl Executable for SqlCommand {
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
-        tracing::info!(table_count = self.tables.len(), "Executing SqlCommand");
-
         // Collect DataFrames from the tabular store
         let mut table_data: Vec<(String, TabularValue)> = Vec::with_capacity(self.tables.len());
-
         for table in &self.tables {
             let source_path = StorePath::from_dotted(&table.source);
-            tracing::debug!(
-                table_name = %table.name,
-                source = %table.source,
-                "Registering table"
-            );
-
             let df = context.tabular().get(&source_path).await?.ok_or_else(|| {
                 anyhow::anyhow!("Table source '{}' not found in tabular store", table.source)
             })?;
-
             table_data.push((table.name.clone(), df));
         }
 
         // Substitute any Tera expressions in the query
         let query = context.substitute(&self.query).await?;
-        tracing::debug!(query = %query, "Executing SQL query");
 
         // Execute the query in a blocking task (SQLContext is not Send-safe across await)
         let df = tokio::task::spawn_blocking(move || -> Result<TabularValue> {
@@ -100,9 +89,16 @@ impl Executable for SqlCommand {
             }
 
             // Execute the query
-            let lazy_result = sql_ctx
-                .execute(&query)
-                .map_err(|e| anyhow::anyhow!("SQL execution failed: {}", e))?;
+            let lazy_result = match sql_ctx.execute(&query) {
+                Ok(lazy_df) => lazy_df,
+                Err(e) => {
+                    tracing::warn!(
+                        query = %query,
+                        "SQL execution error"
+                    );
+                    return Err(anyhow::anyhow!("SQL execution failed: {}", e));
+                }
+            };
 
             // Collect the result
             lazy_result
@@ -119,12 +115,6 @@ impl Executable for SqlCommand {
             .iter()
             .map(|n| ScalarValue::String(n.to_string()))
             .collect();
-
-        tracing::info!(
-            rows = row_count,
-            columns = column_names.len(),
-            "SQL query completed"
-        );
 
         let out = InsertBatch::new(context, output_prefix);
         out.tabular("data", df).await?;

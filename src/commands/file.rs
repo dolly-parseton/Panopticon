@@ -66,26 +66,19 @@ pub struct FileCommand {
 #[async_trait::async_trait]
 impl Executable for FileCommand {
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
-        tracing::info!(file_count = self.files.len(), "Executing FileCommand");
-
         let mut total_rows: u64 = 0;
         let mut total_size: u64 = 0;
 
         for file_spec in self.files.iter() {
-            tracing::info!(
-                name = %file_spec.name,
-                file = %file_spec.file.display(),
-                format = %file_spec.format,
-                "Loading file"
-            );
-
             if !file_spec.file.exists() {
+                tracing::warn!(missing_file = %file_spec.file.display(), "File does not exist");
                 return Err(anyhow::anyhow!(
                     "File does not exist: {}",
                     file_spec.file.display()
                 ));
             }
             if file_spec.file.is_dir() {
+                tracing::warn!(directory_path = %file_spec.file.display(), "Path is a directory, not a file");
                 return Err(anyhow::anyhow!(
                     "Path is a directory, not a file: {}",
                     file_spec.file.display()

@@ -14,18 +14,8 @@ pub struct ExecutionPlan<'a> {
 }
 
 impl<'a> ExecutionPlan<'a> {
-    #[tracing::instrument(skip(namespaces, commands))]
     pub fn new(namespaces: &'a [Namespace], commands: &'a [CommandSpec]) -> Result<Self> {
-        tracing::debug!(
-            namespace_count = namespaces.len(),
-            command_count = commands.len(),
-            "Computing execution plan"
-        );
-
         let namespace_order = compute_namespace_order(namespaces, commands)?;
-
-        tracing::debug!(?namespace_order, "Computed namespace execution order");
-
         Ok(ExecutionPlan {
             namespaces,
             commands,
@@ -135,13 +125,6 @@ fn compute_namespace_order(
                 && dep_ns_idx != command_ns_idx
             {
                 graph.get_mut(&command_ns_idx).unwrap().insert(dep_ns_idx);
-                tracing::trace!(
-                    command = %command.name,
-                    command_namespace_idx = command_ns_idx,
-                    depends_on_namespace_idx = dep_ns_idx,
-                    dependency_path = %dep_path,
-                    "Found cross-namespace dependency"
-                );
             }
         }
     }
@@ -169,13 +152,6 @@ fn compute_command_order(commands: &[&CommandSpec], namespace: &str) -> Result<V
             for (cmd_prefix, &cmd_idx) in &prefix_to_idx {
                 if dep_path.starts_with(cmd_prefix) && cmd_idx != idx {
                     cmd_deps.insert(cmd_idx);
-                    tracing::trace!(
-                        command_idx = idx,
-                        depends_on_idx = cmd_idx,
-                        dependency_path = %dep_path,
-                        command_prefix = %cmd_prefix,
-                        "Found command dependency"
-                    );
                 }
             }
         }

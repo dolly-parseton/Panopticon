@@ -96,12 +96,6 @@ pub struct AggregateCommand {
 #[async_trait::async_trait]
 impl Executable for AggregateCommand {
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
-        tracing::info!(
-            source = %self.source,
-            aggregation_count = self.aggregations.len(),
-            "Executing AggregateCommand"
-        );
-
         let source_path = StorePath::from_dotted(&self.source);
 
         let df = context.tabular().get(&source_path).await?.ok_or_else(|| {
@@ -111,21 +105,9 @@ impl Executable for AggregateCommand {
         let out = InsertBatch::new(context, output_prefix);
 
         for agg in &self.aggregations {
-            tracing::debug!(
-                name = %agg.name,
-                column = ?agg.column,
-                op = ?agg.op,
-                "Computing aggregation"
-            );
-
             let value = compute_aggregation(&df, agg)?;
             out.scalar(&agg.name, value).await?;
         }
-
-        tracing::info!(
-            aggregations_computed = self.aggregations.len(),
-            "AggregateCommand completed"
-        );
 
         Ok(())
     }

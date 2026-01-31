@@ -38,7 +38,8 @@ pub mod extend {
 
     // Spec types - declare your command's attributes and results
     pub use crate::spec::{
-        FieldSpec, LiteralFieldRef, ObjectFields, ReferenceKind, TypeDef,
+        DEFAULT_NAME_POLICY, FieldSpec, LiteralFieldRef, NamePolicy, ObjectFields, ReferenceKind,
+        TypeDef,
         attribute::{AttributeSpec, Attributes},
         builder::{CommandSpecBuilder, PendingAttribute},
         result::{ResultKind, ResultSpec},

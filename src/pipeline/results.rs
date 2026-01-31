@@ -179,6 +179,12 @@ pub enum TabularFormat {
     Json,
 }
 
+impl std::fmt::Display for TabularFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.extension())
+    }
+}
+
 impl TabularFormat {
     pub fn extension(&self) -> &str {
         match self {

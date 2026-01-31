@@ -1,4 +1,5 @@
 use crate::imports::*;
+use regex::Regex;
 
 pub mod attribute;
 pub mod builder;
@@ -12,6 +13,7 @@ pub mod result;
     * ReferenceKind - Enum indicating if a field supports references and how to evaluate them.
     * LiteralFieldRef - Opaque handle proving a field has ReferenceKind::Unsupported (compile-time safety)
     * ObjectFields - Builder for ObjectOf fields that enforces LiteralFieldRef safety
+    * NamePolicy - Struct enforcing naming conventions and reserved names
 */
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum TypeDef<T: Into<String>> {
@@ -165,6 +167,129 @@ impl<T: Into<String> + Clone> ObjectFields<T> {
     }
 
     pub fn build(self) -> Vec<FieldSpec<T>> {
+        for field in &self.fields {
+            DEFAULT_NAME_POLICY.validate(field.name.clone(), "field");
+        }
         self.fields
+    }
+}
+
+pub struct NamePolicy {
+    pub reserved_names: &'static [&'static str],
+    forbidden_regex: Regex,
+}
+
+impl NamePolicy {
+    pub fn new(reserved_names: &'static [&'static str], forbidden_pattern: &str) -> Self {
+        Self {
+            reserved_names,
+            forbidden_regex: Regex::new(forbidden_pattern)
+                .expect("NamePolicy: invalid forbidden_pattern regex"),
+        }
+    }
+
+    pub fn validate(&self, name: impl Into<String>, context: &str) {
+        let name = name.into();
+
+        if self.reserved_names.contains(&name.as_str()) {
+            panic!(
+                "NamePolicy violation: {} name '{}' is reserved",
+                context, name
+            );
+        }
+
+        if self.forbidden_regex.is_match(&name) {
+            panic!(
+                "NamePolicy violation: {} name '{}' contains forbidden characters (pattern: {})",
+                context,
+                name,
+                self.forbidden_regex.as_str()
+            );
+        }
+    }
+}
+
+pub static DEFAULT_NAME_POLICY: LazyLock<NamePolicy> =
+    LazyLock::new(|| NamePolicy::new(&["item", "index"], r"[^a-zA-Z0-9_]"));
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn valid_names_pass_policy() {
+        let policy = &*DEFAULT_NAME_POLICY;
+        policy.validate("tables", "attribute");
+        policy.validate("query", "attribute");
+        policy.validate("data", "result");
+        policy.validate("name_field", "field");
+        policy.validate("column2", "field");
+    }
+
+    #[test]
+    #[should_panic(expected = "NamePolicy violation: attribute name 'item' is reserved")]
+    fn reserved_name_item_rejected() {
+        DEFAULT_NAME_POLICY.validate("item", "attribute");
+    }
+
+    #[test]
+    #[should_panic(expected = "NamePolicy violation: field name 'index' is reserved")]
+    fn reserved_name_index_rejected() {
+        DEFAULT_NAME_POLICY.validate("index", "field");
+    }
+
+    #[test]
+    #[should_panic(expected = "contains forbidden characters")]
+    fn name_with_spaces_rejected() {
+        DEFAULT_NAME_POLICY.validate("my field", "attribute");
+    }
+
+    #[test]
+    #[should_panic(expected = "contains forbidden characters")]
+    fn name_with_dots_rejected() {
+        DEFAULT_NAME_POLICY.validate("store.path", "result");
+    }
+
+    #[test]
+    #[should_panic(expected = "contains forbidden characters")]
+    fn name_with_special_chars_rejected() {
+        DEFAULT_NAME_POLICY.validate("field-name!", "field");
+    }
+
+    #[test]
+    #[should_panic(expected = "contains forbidden characters")]
+    fn object_fields_rejects_bad_name() {
+        let fields = ObjectFields::<&str>::new();
+        let (fields, _) =
+            fields.add_literal("bad name", TypeDef::Scalar(ScalarType::String), true, None);
+        fields.build();
+    }
+
+    #[test]
+    #[should_panic(expected = "is reserved")]
+    fn builder_rejects_reserved_attribute_name() {
+        CommandSpecBuilder::<&str>::new()
+            .attribute(AttributeSpec {
+                name: "item",
+                ty: TypeDef::Scalar(ScalarType::String),
+                required: true,
+                hint: None,
+                default_value: None,
+                reference_kind: ReferenceKind::Unsupported,
+            })
+            .build();
+    }
+
+    #[test]
+    #[should_panic(expected = "contains forbidden characters")]
+    fn builder_rejects_forbidden_result_name() {
+        CommandSpecBuilder::<&str>::new()
+            .fixed_result(
+                "bad.name",
+                TypeDef::Scalar(ScalarType::String),
+                None,
+                ResultKind::Data,
+            )
+            .build();
     }
 }

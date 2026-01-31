@@ -20,8 +20,7 @@ impl Pipeline<Draft> {
     {
         let marker = std::marker::PhantomData::<T>;
         let namespace = namespace.build()?;
-
-        let debug_data = (
+        let (name, ty) = (
             namespace.name().to_string(),
             match namespace.ty() {
                 ExecutionMode::Once => "Once",
@@ -29,32 +28,46 @@ impl Pipeline<Draft> {
                 ExecutionMode::Static { .. } => "Static",
             },
         );
+        tracing::debug!(
+            namespace_name = %name,
+            namespace_type = %ty,
+            "Adding namespace to Pipeline"
+        );
+
         // Check if namespace name already exists
         for ns in self.namespaces.iter() {
             if ns.name() == namespace.name() {
+                tracing::warn!(
+                    namespace_name = %name,
+                    namespace_type = %ty,
+                    "Duplicate namespace name",
+                );
                 return Err(anyhow::anyhow!(
                     "Namespace with name '{}' already exists",
                     namespace.name()
                 ));
             }
         }
-
         // Check if namespace is reserved
-        // It's possible to create an invalid namespace using the Namespace::new() function
         if RESERVED_NAMESPACES.contains(&namespace.name()) {
+            tracing::warn!(
+                namespace_name = %name,
+                namespace_type = %ty,
+                "Reserved namespace name",
+            );
             return Err(anyhow::anyhow!(
                 "Namespace name '{}' is reserved",
                 namespace.name()
             ));
         }
-
         self.namespaces.push(namespace);
-        tracing::debug!(
-            namespace = debug_data.0,
-            ty = debug_data.1,
-            "Added namespace to Commands"
-        );
         let index = self.namespaces.len() - 1;
+        tracing::debug!(
+            namespace_name = %name,
+            namespace_type = %ty,
+            namespace_index = %index,
+            "Namespace added to Pipeline"
+        );
         Ok(NamespaceHandle {
             commands: self,
             namespace_index: index,
@@ -72,11 +85,27 @@ impl Pipeline<Draft> {
     where
         T: Command,
     {
-        let debug_data = (namespace, name.to_string(), T::command_type());
+        let (ns_name, cmd_name, cmd_type) = (
+            self.namespaces[namespace].name(),
+            name.to_string(),
+            T::command_type(),
+        );
+        tracing::debug!(
+            namespace = %ns_name,
+            command_name = %cmd_name,
+            command_type = %cmd_type,
+            "Adding command to Commands"
+        );
 
         // Check if step name already exists in this namespace
         for cmd in self.commands.iter() {
             if cmd.namespace_index == namespace && cmd.name == name {
+                tracing::warn!(
+                    namespace = %ns_name,
+                    command_name = %cmd_name,
+                    command_type = %cmd_type,
+                    "Duplicate command name in namespace",
+                );
                 return Err(anyhow::anyhow!(
                     "Command with name '{}' already exists in namespace index {}",
                     name,
@@ -92,14 +121,15 @@ impl Pipeline<Draft> {
         )?);
 
         tracing::debug!(
-            namespace = ?debug_data.0,
-            command_name = ?debug_data.1,
-            command_type = ?debug_data.2,
-            "Added command to Commands"
+            namespace = %ns_name,
+            command_name = %cmd_name,
+            command_type = %cmd_type,
+            "Command added to Pipeline"
         );
         Ok(())
     }
 
+    #[tracing::instrument(skip(self), err, fields(command_count = self.commands.len(), namespace_count = self.namespaces.len()))]
     pub fn compile(self) -> Result<Pipeline<Ready>> {
         // Consolidate as much validation here as possible
         // Some are pretty unlikely given how the API is designed but I'm usabilitymaxxing.
@@ -110,6 +140,10 @@ impl Pipeline<Draft> {
         for (ns_name, cmd_name) in self.command_ns_pairs_iter() {
             // Check namespace names
             if !namespace_names.insert(ns_name) {
+                tracing::warn!(
+                    namespace_name = %ns_name,
+                    "Duplicate namespace name found",
+                );
                 return Err(anyhow::anyhow!(
                     "Duplicate namespace name found during compilation: '{}'",
                     ns_name
@@ -118,6 +152,10 @@ impl Pipeline<Draft> {
 
             // Check reserved namespaces haven't been used
             if RESERVED_NAMESPACES.contains(&ns_name) {
+                tracing::warn!(
+                    namespace_name = %ns_name,
+                    "Reserved namespace name used",
+                );
                 return Err(anyhow::anyhow!(
                     "Reserved namespace name '{}' used during compilation",
                     ns_name
@@ -127,6 +165,11 @@ impl Pipeline<Draft> {
             // Check command names within namespace
             let cmd_set = command_names_per_namespace.entry(ns_name).or_default();
             if !cmd_set.insert(cmd_name) {
+                tracing::warn!(
+                    namespace_name = %ns_name,
+                    command_name = %cmd_name,
+                    "Duplicate command name found in namespace",
+                );
                 return Err(anyhow::anyhow!(
                     "Duplicate command name '{}' found in namespace '{}' during compilation",
                     cmd_name,
@@ -144,6 +187,10 @@ impl Pipeline<Draft> {
                 ExecutionMode::Iterative { store_path, .. } => {
                     // Check that store_path and source have been set
                     if store_path.segments().is_empty() {
+                        tracing::warn!(
+                            namespace_name = %namespace.name(),
+                            "Iterative namespace has empty store_path",
+                        );
                         return Err(anyhow::anyhow!(
                             "Iterative namespace '{}' has an empty store_path",
                             namespace.name()
@@ -163,6 +210,7 @@ impl Pipeline<Draft> {
 
         // Execution plan validation
         if let Err(e) = ExecutionPlan::new(&self.namespaces, &self.commands) {
+            tracing::warn!("Execution plan validation failed during compilation: {}", e);
             return Err(anyhow::anyhow!(
                 "Execution plan validation failed during compilation: {}",
                 e
@@ -177,6 +225,7 @@ impl Pipeline<Draft> {
             None of which are super easy but doable if I make a proper type for looking ahead at the specs by StorePath.
         */
 
+        tracing::debug!("Pipeline compilation successful");
         Ok(Pipeline::<Ready> {
             namespaces: self.namespaces,
             commands: self.commands,

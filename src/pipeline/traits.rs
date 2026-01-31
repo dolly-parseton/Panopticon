@@ -18,6 +18,9 @@ struct ExecutableWrapper {
 // ^ Again might extend later with more common functionality
 #[async_trait::async_trait]
 impl Executable for ExecutableWrapper {
+    #[tracing::instrument(skip(self, context, output_prefix), err, fields(
+        command_output = %output_prefix.to_dotted(),
+    ))]
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
         // Capture Instant::now() before execution starts
         let start_time = std::time::Instant::now();
@@ -63,6 +66,11 @@ impl Executable for ExecutableWrapper {
                     .await?;
             }
         }
+        tracing::debug!(
+            command_output = %output_prefix.to_dotted(),
+            duration_ms = duration,
+            "Command execution complete"
+        );
         // Return original execution result
         result
     }

@@ -4,9 +4,15 @@ static CONDITIONCOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
     let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
         "branches",
         true,
-        Some("Array of {if, then} objects evaluated in order"),
+        Some("Array of {name, if, then} objects evaluated in order"),
     );
 
+    let (fields, name_ref) = fields.add_literal(
+        "name",
+        TypeDef::Scalar(ScalarType::String),
+        true,
+        Some("Unique identifier for this branch"),
+    );
     let fields = fields.add_template(
         "if",
         TypeDef::Scalar(ScalarType::String),
@@ -50,10 +56,12 @@ static CONDITIONCOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
             Some("Index of the matched branch (0-based), or -1 if default was used."),
             ResultKind::Data,
         )
+        .derived_result("branches", name_ref, None, ResultKind::Data)
         .build()
 });
 
 struct Branch {
+    name: String,
     condition: String,
     then_value: String,
 }
@@ -66,42 +74,50 @@ pub struct ConditionCommand {
 #[async_trait::async_trait]
 impl Executable for ConditionCommand {
     async fn execute(&self, context: &ExecutionContext, output_prefix: &StorePath) -> Result<()> {
-        tracing::info!(
-            branch_count = self.branches.len(),
-            has_default = self.default.is_some(),
-            "Executing ConditionCommand"
-        );
-
         let out = InsertBatch::new(context, output_prefix);
+        let mut first_match: Option<(usize, String)> = None;
 
-        // Evaluate branches in order
+        // Evaluate all branches and write per-branch result objects
         for (index, branch) in self.branches.iter().enumerate() {
-            // Evaluate the condition
             let condition_template = format!("{{{{ {} }}}}", branch.condition);
             let condition_result = context.substitute(&condition_template).await?;
             let condition_value = parse_scalar(&condition_result);
+            let matched = is_truthy(&condition_value);
 
-            if is_truthy(&condition_value) {
-                // Condition matched - substitute and return the then_value
+            let value = if matched {
                 let result = context.substitute(&branch.then_value).await?;
+                if first_match.is_none() {
+                    first_match = Some((index, result.clone()));
+                }
+                result
+            } else {
+                String::new()
+            };
 
+            let branch_obj = ObjectBuilder::new()
+                .insert("matched", matched)
+                .insert("value", value)
+                .build_scalar();
+            out.scalar(&branch.name, branch_obj).await?;
+        }
+
+        // Write summary fixed results
+        match first_match {
+            Some((index, result)) => {
                 out.string("result", result).await?;
                 out.bool("matched", true).await?;
                 out.i64("branch_index", index as i64).await?;
-
-                return Ok(());
+            }
+            None => {
+                let result = match &self.default {
+                    Some(default_template) => context.substitute(default_template).await?,
+                    None => String::new(),
+                };
+                out.string("result", result).await?;
+                out.bool("matched", false).await?;
+                out.i64("branch_index", -1).await?;
             }
         }
-
-        // No branch matched - use default
-        let result = match &self.default {
-            Some(default_template) => context.substitute(default_template).await?,
-            None => String::new(),
-        };
-
-        out.string("result", result).await?;
-        out.bool("matched", false).await?;
-        out.i64("branch_index", -1).await?;
 
         Ok(())
     }
@@ -129,6 +145,9 @@ impl FromAttributes for ConditionCommand {
         for (i, branch_value) in branches_array.iter().enumerate() {
             let branch_obj = branch_value.as_object_or_err(&format!("branches[{}]", i))?;
 
+            let name = branch_obj
+                .get_required_string("name")
+                .context(format!("branches[{}]", i))?;
             let condition = branch_obj
                 .get_required_string("if")
                 .context(format!("branches[{}]", i))?;
@@ -137,6 +156,7 @@ impl FromAttributes for ConditionCommand {
                 .context(format!("branches[{}]", i))?;
 
             branches.push(Branch {
+                name,
                 condition,
                 then_value,
             });
@@ -153,8 +173,9 @@ mod tests {
     use super::*;
     use crate::test_utils::init_tracing;
 
-    fn make_branch(condition: &str, then_value: &str) -> Branch {
+    fn make_branch(name: &str, condition: &str, then_value: &str) -> Branch {
         Branch {
+            name: name.to_string(),
             condition: condition.to_string(),
             then_value: then_value.to_string(),
         }
@@ -166,6 +187,7 @@ mod tests {
             .into_iter()
             .map(|b| {
                 ObjectBuilder::new()
+                    .insert("name", b.name)
                     .insert("if", b.condition)
                     .insert("then", b.then_value)
                     .build_scalar()
@@ -227,8 +249,8 @@ mod tests {
 
         let attrs = condition_attrs(
             vec![
-                make_branch("inputs.status == 'active'", "User is active"),
-                make_branch("inputs.status == 'pending'", "User is pending"),
+                make_branch("is_active", "inputs.status == 'active'", "User is active"),
+                make_branch("is_pending", "inputs.status == 'pending'", "User is pending"),
             ],
             Some("Unknown"),
         );
@@ -263,8 +285,8 @@ mod tests {
 
         let attrs = condition_attrs(
             vec![
-                make_branch("inputs.status == 'active'", "User is active"),
-                make_branch("inputs.status == 'pending'", "User is pending"),
+                make_branch("is_active", "inputs.status == 'active'", "User is active"),
+                make_branch("is_pending", "inputs.status == 'pending'", "User is pending"),
             ],
             Some("Unknown"),
         );
@@ -299,8 +321,8 @@ mod tests {
 
         let attrs = condition_attrs(
             vec![
-                make_branch("inputs.status == 'active'", "User is active"),
-                make_branch("inputs.status == 'pending'", "User is pending"),
+                make_branch("is_active", "inputs.status == 'active'", "User is active"),
+                make_branch("is_pending", "inputs.status == 'pending'", "User is pending"),
             ],
             Some("Unknown status"),
         );
@@ -334,7 +356,7 @@ mod tests {
             .unwrap();
 
         let attrs = condition_attrs(
-            vec![make_branch("inputs.status == 'active'", "User is active")],
+            vec![make_branch("is_active", "inputs.status == 'active'", "User is active")],
             None,
         );
 
@@ -369,6 +391,7 @@ mod tests {
 
         let attrs = condition_attrs(
             vec![make_branch(
+                "always",
                 "true",
                 "Hello {{ inputs.name }}, you have {{ inputs.count }} items",
             )],
@@ -403,7 +426,7 @@ mod tests {
             .unwrap();
 
         let attrs = condition_attrs(
-            vec![make_branch("inputs.status == 'active'", "Active")],
+            vec![make_branch("is_active", "inputs.status == 'active'", "Active")],
             Some("Unexpected status: {{ inputs.status }}"),
         );
 
@@ -436,9 +459,9 @@ mod tests {
 
         let attrs = condition_attrs(
             vec![
-                make_branch("inputs.score >= 90", "A"),
-                make_branch("inputs.score >= 80", "B"),
-                make_branch("inputs.score >= 70", "C"),
+                make_branch("grade_a", "inputs.score >= 90", "A"),
+                make_branch("grade_b", "inputs.score >= 80", "B"),
+                make_branch("grade_c", "inputs.score >= 70", "C"),
             ],
             Some("F"),
         );
@@ -486,11 +509,13 @@ mod tests {
 
         // Build branch objects using ObjectBuilder
         let branch1 = ObjectBuilder::new()
+            .insert("name", "big_check")
             .insert("if", "x > 5")
             .insert("then", "big")
             .build_scalar();
 
         let branch2 = ObjectBuilder::new()
+            .insert("name", "small_check")
             .insert("if", "x <= 5")
             .insert("then", "small")
             .build_scalar();
@@ -503,8 +528,10 @@ mod tests {
         let cmd = ConditionCommand::from_attributes(&attrs).unwrap();
 
         assert_eq!(cmd.branches.len(), 2);
+        assert_eq!(cmd.branches[0].name, "big_check");
         assert_eq!(cmd.branches[0].condition, "x > 5");
         assert_eq!(cmd.branches[0].then_value, "big");
+        assert_eq!(cmd.branches[1].name, "small_check");
         assert_eq!(cmd.branches[1].condition, "x <= 5");
         assert_eq!(cmd.branches[1].then_value, "small");
         assert_eq!(cmd.default, Some("unknown".to_string()));
@@ -515,7 +542,7 @@ mod tests {
         init_tracing();
 
         let attrs = condition_attrs(
-            vec![make_branch("inputs.value > 10", "big number")],
+            vec![make_branch("is_big", "inputs.value > 10", "big number")],
             Some("small number"),
         );
 
@@ -604,6 +631,7 @@ mod tests {
 
         // Branch missing required 'then' field
         let branch = ObjectBuilder::new()
+            .insert("name", "test")
             .insert("if", "true")
             // Missing 'then' field
             .build_scalar();
@@ -626,5 +654,171 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[tokio::test]
+    async fn test_per_branch_objects() {
+        init_tracing();
+        let mut pipeline = Pipeline::new();
+
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("pending".to_string())),
+            )
+            .unwrap();
+
+        let attrs = condition_attrs(
+            vec![
+                make_branch("is_active", "inputs.status == 'active'", "User is active"),
+                make_branch("is_pending", "inputs.status == 'pending'", "User is pending"),
+            ],
+            Some("Unknown"),
+        );
+
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec"))
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
+
+        // Verify per-branch objects
+        let prefix = StorePath::from_segments(["exec", "check"]);
+
+        let active_obj = context
+            .scalar()
+            .get(&prefix.with_segment("is_active"))
+            .await
+            .unwrap()
+            .unwrap();
+        let active_map = active_obj.as_object().unwrap();
+        assert_eq!(active_map.get("matched").unwrap().as_bool().unwrap(), false);
+        assert_eq!(active_map.get("value").unwrap().as_str().unwrap(), "");
+
+        let pending_obj = context
+            .scalar()
+            .get(&prefix.with_segment("is_pending"))
+            .await
+            .unwrap()
+            .unwrap();
+        let pending_map = pending_obj.as_object().unwrap();
+        assert_eq!(pending_map.get("matched").unwrap().as_bool().unwrap(), true);
+        assert_eq!(
+            pending_map.get("value").unwrap().as_str().unwrap(),
+            "User is pending"
+        );
+
+        // Summary results should still reflect first match
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
+        assert_eq!(result, "User is pending");
+        assert!(matched);
+        assert_eq!(index, 1);
+    }
+
+    #[tokio::test]
+    async fn test_per_branch_all_unmatched() {
+        init_tracing();
+        let mut pipeline = Pipeline::new();
+
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("status", ScalarValue::String("unknown".to_string())),
+            )
+            .unwrap();
+
+        let attrs = condition_attrs(
+            vec![
+                make_branch("is_active", "inputs.status == 'active'", "Active"),
+                make_branch("is_pending", "inputs.status == 'pending'", "Pending"),
+            ],
+            Some("Fallback"),
+        );
+
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec"))
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
+        let prefix = StorePath::from_segments(["exec", "check"]);
+
+        // Both branches should be unmatched
+        for name in &["is_active", "is_pending"] {
+            let obj = context
+                .scalar()
+                .get(&prefix.with_segment(*name))
+                .await
+                .unwrap()
+                .unwrap();
+            let map = obj.as_object().unwrap();
+            assert_eq!(map.get("matched").unwrap().as_bool().unwrap(), false);
+            assert_eq!(map.get("value").unwrap().as_str().unwrap(), "");
+        }
+
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
+        assert_eq!(result, "Fallback");
+        assert!(!matched);
+        assert_eq!(index, -1);
+    }
+
+    #[tokio::test]
+    async fn test_per_branch_multiple_matches() {
+        init_tracing();
+        let mut pipeline = Pipeline::new();
+
+        pipeline
+            .add_namespace(
+                NamespaceBuilder::new("inputs")
+                    .static_ns()
+                    .insert("score", ScalarValue::Number(85.into())),
+            )
+            .unwrap();
+
+        let attrs = condition_attrs(
+            vec![
+                make_branch("grade_a", "inputs.score >= 90", "A"),
+                make_branch("grade_b", "inputs.score >= 80", "B"),
+                make_branch("grade_c", "inputs.score >= 70", "C"),
+            ],
+            Some("F"),
+        );
+
+        pipeline
+            .add_namespace(NamespaceBuilder::new("exec"))
+            .unwrap()
+            .add_command::<ConditionCommand>("check", &attrs)
+            .unwrap();
+
+        let completed = pipeline.compile().unwrap().execute().await.unwrap();
+        let context = completed.context();
+        let prefix = StorePath::from_segments(["exec", "check"]);
+
+        // grade_a: 85 < 90 → false
+        let a = context.scalar().get(&prefix.with_segment("grade_a")).await.unwrap().unwrap();
+        assert_eq!(a.as_object().unwrap().get("matched").unwrap().as_bool().unwrap(), false);
+
+        // grade_b: 85 >= 80 → true
+        let b = context.scalar().get(&prefix.with_segment("grade_b")).await.unwrap().unwrap();
+        assert_eq!(b.as_object().unwrap().get("matched").unwrap().as_bool().unwrap(), true);
+        assert_eq!(b.as_object().unwrap().get("value").unwrap().as_str().unwrap(), "B");
+
+        // grade_c: 85 >= 70 → true
+        let c = context.scalar().get(&prefix.with_segment("grade_c")).await.unwrap().unwrap();
+        assert_eq!(c.as_object().unwrap().get("matched").unwrap().as_bool().unwrap(), true);
+        assert_eq!(c.as_object().unwrap().get("value").unwrap().as_str().unwrap(), "C");
+
+        // Summary: first match is grade_b (index 1)
+        let (result, matched, index) = get_result(&context, "exec", "check").await;
+        assert_eq!(result, "B");
+        assert!(matched);
+        assert_eq!(index, 1);
     }
 }

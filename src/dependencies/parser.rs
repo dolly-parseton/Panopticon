@@ -8,25 +8,10 @@ use pest_derive::Parser;
 #[grammar = "tera.pest"] // relative to src directory
 struct TeraParser;
 
-#[tracing::instrument(
-    name = "parse_template_dependencies",
-    level = "debug",
-    skip_all,
-    fields(template_hash, initial_count, final_count)
-)]
 pub fn parse_template_dependencies(
     template: &str,
     dependencies: &mut HashSet<StorePath>,
 ) -> Result<()> {
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        use std::hash::{Hash, Hasher};
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        template.hash(&mut hasher);
-        let template_hash = format!("{:x}", hasher.finish());
-        tracing::Span::current().record("template_hash", template_hash.as_str());
-        tracing::Span::current().record("initial_count", dependencies.len());
-    }
-
     let parse_result = TeraParser::parse(Rule::template, template);
     let pairs = match parse_result {
         Ok(pairs) => pairs,
@@ -35,11 +20,6 @@ pub fn parse_template_dependencies(
         }
     };
     extract_identifiers_recursive(pairs, dependencies);
-
-    if tracing::enabled!(tracing::Level::DEBUG) {
-        tracing::Span::current().record("final_count", dependencies.len());
-    }
-
     Ok(())
 }
 
@@ -69,7 +49,6 @@ mod tests {
                 Welcome back, member!
             {% endif %}
         "#;
-
         let mut vars = HashSet::new();
         parse_template_dependencies(template, &mut vars).unwrap();
         println!("Extracted variables: {:?}", vars);

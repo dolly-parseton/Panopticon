@@ -2,28 +2,28 @@ use super::{Completed, Draft, Ready};
 use crate::imports::*;
 
 impl Pipeline<Ready> {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip(self), err, fields(
+    namespace_count = self.namespaces.len(),
+    command_count = self.commands.len()
+))]
     pub async fn execute(self) -> Result<Pipeline<Completed>> {
         // Create a new execution context
         let context = ExecutionContext::new();
         // Add in all "values" from Namespaces of type Static
+        let mut static_count = 0u32;
         for namespace in &self.namespaces {
             if let ExecutionMode::Static { values } = &namespace.ty() {
                 for (key, value) in values {
-                    {
-                        let store_path = StorePath::from_segments([namespace.name(), key]);
-                        context.scalar().insert(&store_path, value.clone()).await?;
-                        tracing::debug!(
-                            namespace = namespace.name(),
-                            key = key.as_str(),
-                            "Inserted static value into ExecutionContext scalar store"
-                        );
-                    }
+                    let store_path = StorePath::from_segments([namespace.name(), key]);
+                    context.scalar().insert(&store_path, value.clone()).await?;
+                    static_count += 1;
                 }
             }
         }
-
-        tracing::debug!("Starting execution of Commands");
+        tracing::debug!(
+            static_value_count = static_count,
+            "Inserted static values into ExecutionContext scalar store"
+        );
 
         let plan = ExecutionPlan::new(&self.namespaces, &self.commands)?;
 
@@ -52,8 +52,8 @@ impl Pipeline<Ready> {
                     tracing::debug!(
                         namespace = store_path
                             .namespace()
-                            .unwrap_or(&"<no-namespace>".to_string())
-                            .as_str(),
+                            .map(|ns| ns.as_str())
+                            .unwrap_or("<no-namespace>"),
                         store_path = store_path.to_dotted(),
                         "Processing iterative namespace"
                     );
@@ -101,6 +101,7 @@ impl Pipeline<Ready> {
             }
         }
 
+        tracing::debug!("Completed execution of all Commands");
         Ok(Pipeline::<Completed> {
             namespaces: self.namespaces,
             commands: self.commands,
@@ -108,7 +109,7 @@ impl Pipeline<Ready> {
         })
     }
 
-    #[tracing::instrument(skip(self, commands, context), fields(namespace, command_count = commands.len()))]
+    #[tracing::instrument(skip(self, commands, context), err, fields(namespace, command_count = commands.len(), iteration_index = ?iteration_index))]
     async fn execute_commands(
         &self,
         commands: &[&CommandSpec],
@@ -117,24 +118,11 @@ impl Pipeline<Ready> {
         iteration_index: Option<usize>,
     ) -> Result<()> {
         for command_spec in commands {
-            tracing::debug!(
-                command_name = %command_spec.name,
-                iteration_index = ?iteration_index,
-                "Executing command"
-            );
             // Run substitution on all string attributes.
-            tracing::debug!(
-                command_name = %command_spec.name,
-                "Substituting command attributes"
-            );
             let substituted_attrs =
                 substitute_attributes(&command_spec.attributes, context, &command_spec.name)
                     .await?;
             let command = (command_spec.builder)(&substituted_attrs)?;
-            tracing::debug!(
-                command_name = %command_spec.name,
-                "Substituted command attributes and built command instance"
-            );
             // Create output prefix as [namespace, command_name] or [namespace, command_name, index]
             let mut output_prefix = StorePath::from_segments([namespace, &command_spec.name]);
             if let Some(idx) = iteration_index {
@@ -161,7 +149,6 @@ async fn substitute_attributes(
 ) -> Result<Attributes> {
     let mut substituted = Attributes::new();
     for (key, value) in attrs.iter() {
-        tracing::debug!(attribute_key = key.as_str(), "Substituting attribute value");
         let new_value = match value {
             ScalarValue::String(s) => {
                 let rendered = context.substitute(s).await.with_context(|| {
@@ -170,10 +157,6 @@ async fn substitute_attributes(
                         key, command_name
                     )
                 })?;
-                tracing::debug!(
-                    attribute_key = key.as_str(),
-                    "Substituted attribute value using template rendering"
-                );
                 ScalarValue::String(rendered)
             }
             _ => value.clone(),

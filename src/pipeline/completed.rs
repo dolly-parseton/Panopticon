@@ -2,6 +2,14 @@ use super::{Completed, Draft, Ready};
 use crate::imports::*;
 
 impl Pipeline<Completed> {
+    // Exceedingly subject to change, not really happy with this API yet.
+    #[tracing::instrument(skip(self), err, fields(
+    namespace_count = self.namespaces.len(),
+    command_count = self.commands.len(),
+    output_path = %output_path.display(),
+    format = %format,
+    excluded_command_count = excluded_commands.len(),
+))]
     pub async fn results(
         &self,
         ResultSettings {
@@ -25,6 +33,12 @@ impl Pipeline<Completed> {
                 .get(cmd.namespace_index)
                 .context("Invalid namespace index on command")?;
 
+            tracing::debug!(
+                command = %cmd.name,
+                namespace = %namespace.name(),
+                "Collecting results for command"
+            );
+
             let base_path = StorePath::from_segments([namespace.name(), cmd.name.as_str()]);
 
             // Skip excluded commands
@@ -32,6 +46,10 @@ impl Pipeline<Completed> {
                 .iter()
                 .any(|ex| base_path.starts_with(ex) || ex == &base_path)
             {
+                tracing::debug!(
+                    command = %base_path.to_dotted(),
+                    "Skipping excluded command"
+                );
                 continue;
             }
 
@@ -55,6 +73,11 @@ impl Pipeline<Completed> {
                             break;
                         }
                     }
+                    tracing::debug!(
+                        command = %base_path.to_dotted(),
+                        iteration_count = paths.len(),
+                        "Resolved iterative result paths"
+                    );
                     paths
                 }
             };
@@ -151,6 +174,11 @@ impl Pipeline<Completed> {
                 results.push(CommandResults { source, meta, data });
             }
         }
+
+        tracing::debug!(
+            result_count = results.len(),
+            "Collected results from pipeline execution"
+        );
 
         Ok(ResultStore { results })
     }

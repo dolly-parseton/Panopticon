@@ -8,6 +8,7 @@ anyhow = "1.0.100"
 async-trait = "0.1.89"
 pest = "2.8.5"
 pest_derive = "2.8.5"
+regex = "1"
 polars = { version = "0.52.0", features = [
     "sql",
     "lazy",

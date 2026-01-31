@@ -74,12 +74,10 @@ impl NamespaceBuilder<sealed::Iterative> {
     }
 }
 
-#[tracing::instrument(level = "debug", skip(context), fields(namespace_type = ?namespace_type))]
 pub(in crate::namespace) async fn resolve_iterator_values(
     context: &ExecutionContext,
     namespace_type: &ExecutionMode,
 ) -> Result<Vec<ScalarValue>> {
-    tracing::debug!("Extracting items for iterative namespace");
     let ExecutionMode::Iterative {
         store_path,
         source,
@@ -91,11 +89,6 @@ pub(in crate::namespace) async fn resolve_iterator_values(
     };
     match source {
         IteratorType::ScalarStringSplit { delimiter } => {
-            tracing::debug!(
-                store_path = store_path.to_dotted().as_str(),
-                delimiter = delimiter.as_str(),
-                "Extracting items via string split"
-            );
             let value =
                 context.scalar().get(store_path).await?.ok_or_else(|| {
                     anyhow::anyhow!("Key '{}' not found in scalar store", store_path)

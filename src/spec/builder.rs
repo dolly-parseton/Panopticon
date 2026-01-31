@@ -1,6 +1,6 @@
 use crate::imports::*;
 
-use super::{LiteralFieldRef, ObjectFields, extract_object_fields};
+use super::{DEFAULT_NAME_POLICY, LiteralFieldRef, ObjectFields, extract_object_fields};
 
 // Uses some generics magic to compile time safety for certain spec edge cases.
 
@@ -117,6 +117,23 @@ impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> CommandSpecBuilder<T
                     field_name,
                     attribute,
                 );
+            }
+        }
+
+        let policy = &*DEFAULT_NAME_POLICY;
+
+        for attr in &self.attributes {
+            policy.validate(attr.name.clone(), "attribute");
+        }
+
+        for result in &self.results {
+            match result {
+                ResultSpec::Field { name, .. } => {
+                    policy.validate(name.clone(), "result");
+                }
+                ResultSpec::DerivedFromSingleAttribute { .. } => {
+                    // Derived result names come from runtime data, not spec-defined names
+                }
             }
         }
 
