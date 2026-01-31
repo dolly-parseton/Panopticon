@@ -1,7 +1,11 @@
-//! Example: Using the `when` conditional attribute on commands
+//! Example: Using the `when` attribute to conditionally skip commands
 //!
-//! This example demonstrates how the `when` attribute can be used to conditionally
-//! execute commands based on values in the execution store at runtime.
+//! Every command supports a `when` attribute — a Tera expression evaluated at
+//! runtime. If it resolves to a falsy value the command is skipped entirely and
+//! its results are absent from the ResultStore.
+//!
+//! This example runs the same pipeline twice with different feature flags to
+//! show both the executed and skipped paths.
 //!
 //! Run with: cargo run --example when_conditional
 
@@ -9,78 +13,69 @@ use panopticon_core::prelude::*;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
-        )
-        .try_init()
-        .ok();
-
-    println!("=== Example 1: Condition is TRUE ===");
+    println!("=== Feature flag: TRUE ===");
     run_with_feature_flag(true).await?;
 
-    println!();
-
-    println!("=== Example 2: Condition is FALSE ===");
+    println!("\n=== Feature flag: FALSE ===");
     run_with_feature_flag(false).await?;
 
     Ok(())
 }
 
-async fn run_with_feature_flag(feature_enabled: bool) -> anyhow::Result<()> {
+async fn run_with_feature_flag(enabled: bool) -> anyhow::Result<()> {
     let mut pipeline = Pipeline::new();
 
+    // --- Static namespace: feature flag + user data ---
     pipeline.add_namespace(
         NamespaceBuilder::new("inputs")
             .static_ns()
-            .insert("feature_enabled", ScalarValue::Bool(feature_enabled))
+            .insert("feature_enabled", ScalarValue::Bool(enabled))
             .insert("user_name", ScalarValue::String("Alice".to_string())),
     )?;
 
+    // --- Command with `when` guard ---
+    // The command is only executed when inputs.feature_enabled is truthy.
     let attrs = ObjectBuilder::new()
         .insert("when", "inputs.feature_enabled")
         .insert(
             "branches",
-            ScalarValue::Array(vec![
-                ObjectBuilder::new()
-                    .insert("if", "true")
-                    .insert("then", "Hello, {{ inputs.user_name }}! Feature is active.")
-                    .build_scalar(),
-            ]),
+            ScalarValue::Array(vec![ObjectBuilder::new()
+                .insert("name", "greeting")
+                .insert("if", "true")
+                .insert("then", "Hello, {{ inputs.user_name }}! Feature is active.")
+                .build_scalar()]),
         )
         .insert("default", "Fallback message")
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("example"))
-        .unwrap()
+        .add_namespace(NamespaceBuilder::new("example"))?
         .add_command::<ConditionCommand>("greeting", &attrs)?;
 
-    // Compile and execute the pipeline
+    // --- Execute ---
     let completed = pipeline.compile()?.execute().await?;
-
-    // Collect results via ResultStore
     let results = completed.results(ResultSettings::default()).await?;
+
+    // --- Inspect results ---
     let source = StorePath::from_segments(["example", "greeting"]);
+    let cmd_results = results
+        .get_by_source(&source)
+        .expect("Expected example.greeting results");
 
-    match results.get_by_source(&source) {
-        Some(cmd_results) => {
-            // COMMON_RESULTS provides status meta on every command
-            let status_path = source.with_segment("status");
-            let status = cmd_results.meta_get(&status_path);
-            println!("  status = {:?}", status);
+    let status = cmd_results
+        .meta_get(&source.with_segment("status"))
+        .expect("Expected status");
+    println!("  status = {}", status);
 
-            let result_path = source.with_segment("result");
-            if let Some(result_value) = cmd_results.data_get(&result_path) {
-                let (_ty, value) = result_value.as_scalar().unwrap();
-                println!("  result = {}", value);
-            } else {
-                println!("  Command was skipped (when condition was false)");
-            }
-        }
-        None => {
-            println!("No results found for example.greeting");
-        }
+    // When the `when` condition is false the command is skipped:
+    // status is "skipped" and data results are absent.
+    if let Some(result) = cmd_results
+        .data_get(&source.with_segment("result"))
+        .and_then(|r| r.as_scalar())
+    {
+        println!("  result = {}", result.1);
+    } else {
+        println!("  (no data — command was skipped)");
     }
 
     Ok(())
