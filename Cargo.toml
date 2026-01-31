@@ -2,6 +2,7 @@
 name = "panopticon-core"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-only"
 
 [dependencies]
 anyhow = "1.0.100"
@@ -33,3 +34,39 @@ tempfile = "3"
 
 [build-dependencies]
 ureq = "2.10"
+
+# ─── Prelude examples (using panopticon features) ───
+
+[[example]]
+name = "multi_format_load"
+path = "examples/prelude/multi_format_load.rs"
+
+[[example]]
+name = "when_conditional"
+path = "examples/prelude/when_conditional.rs"
+
+[[example]]
+name = "template_inheritance"
+path = "examples/prelude/template_inheritance.rs"
+
+[[example]]
+name = "iterate_object_keys"
+path = "examples/prelude/iterate_object_keys.rs"
+
+[[example]]
+name = "pipeline_reuse"
+path = "examples/prelude/pipeline_reuse.rs"
+
+[[example]]
+name = "aggregate_and_export"
+path = "examples/prelude/aggregate_and_export.rs"
+
+# ─── Extend examples (building custom commands) ───
+
+[[example]]
+name = "custom_command"
+path = "examples/extend/custom_command.rs"
+
+[[example]]
+name = "command_spec_safety"
+path = "examples/extend/command_spec_safety.rs"
