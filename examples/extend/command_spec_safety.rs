@@ -109,14 +109,11 @@ fn main() {
     // 3a. Reserved attribute name "item"
     let result = panic::catch_unwind(|| {
         CommandSpecBuilder::<&str>::new()
-            .attribute(AttributeSpec {
-                name: "item",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: None,
-                default_value: None,
-                reference_kind: ReferenceKind::Unsupported,
-            })
+            .attribute(
+                AttributeSpecBuilder::new("item", TypeDef::Scalar(ScalarType::String))
+                    .required()
+                    .build(),
+            )
             .build();
     });
     println!(
@@ -159,14 +156,11 @@ fn main() {
     // 3d. Forbidden characters: spaces
     let result = panic::catch_unwind(|| {
         CommandSpecBuilder::<&str>::new()
-            .attribute(AttributeSpec {
-                name: "my field",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: None,
-                default_value: None,
-                reference_kind: ReferenceKind::Unsupported,
-            })
+            .attribute(
+                AttributeSpecBuilder::new("my field", TypeDef::Scalar(ScalarType::String))
+                    .required()
+                    .build(),
+            )
             .build();
     });
     println!(
@@ -229,14 +223,11 @@ fn main() {
         pending
             .finalise_attribute(fields)
             // Add a plain scalar attribute
-            .attribute(AttributeSpec {
-                name: "scalar_attr",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: None,
-                default_value: None,
-                reference_kind: ReferenceKind::Unsupported,
-            })
+            .attribute(
+                AttributeSpecBuilder::new("scalar_attr", TypeDef::Scalar(ScalarType::String))
+                    .required()
+                    .build(),
+            )
             // Try to derive results from the scalar attribute — not ArrayOf(ObjectOf)
             .derived_result("scalar_attr", name_ref, None, ResultKind::Data)
             .build();

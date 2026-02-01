@@ -18,14 +18,13 @@ use panopticon_core::prelude::*;
 
 static REVERSE_SPEC: CommandSchema = LazyLock::new(|| {
     CommandSpecBuilder::new()
-        .attribute(AttributeSpec {
-            name: "input",
-            ty: TypeDef::Scalar(ScalarType::String),
-            required: true,
-            hint: Some("String to reverse (supports Tera template substitution)"),
-            default_value: None,
-            reference_kind: ReferenceKind::StaticTeraTemplate,
-        })
+        .attribute(
+            AttributeSpecBuilder::new("input", TypeDef::Scalar(ScalarType::String))
+                .required()
+                .hint("String to reverse (supports Tera template substitution)")
+                .reference(ReferenceKind::StaticTeraTemplate)
+                .build(),
+        )
         .fixed_result(
             "reversed",
             TypeDef::Scalar(ScalarType::String),

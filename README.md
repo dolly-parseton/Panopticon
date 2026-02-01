@@ -43,6 +43,7 @@ After execution, a `ResultStore` collects all outputs, writes tabular data to di
 * Additional safety checks at compile and lazylock time.
 * Narrow the extend API surface, starting with AttributeSpec used in CommandSpecBuilder, need to write a builder or change the attribute function.
 * Extend the spec types to support more verbose ResultStore schema (Maybe consider a ser/de approach to result capture using the specs as a schema?)
+* Add some serde support for the specs.
 * Create a dedicated `panopticon-kql` crate that uses the `panopticon-core` traits. Will likely write two commands, one for Defender XDR (via the Graph API) and one for Sentinel workspaces (basically already done in the previous tool attempts).
 * Explore forensic parser integrations, for example a command type that can expose a EVTX file as a TabularValue. Lots of very fun applications for something like this.
 * Finish the TUI attempt started in `kql-panopticon` but using this library and pipeline approach. I think the way I've written the API lends itself well to the REPL approach started but I wasn't engaged enough in how the Ratatui library was being used and alot of functionality got conflated in with the UI (so it's not a quick fix, better to focus on deliberate CLIs for specific tasks).
