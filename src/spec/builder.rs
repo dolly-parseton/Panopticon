@@ -52,7 +52,6 @@ impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> CommandSpecBuilder<T
         )
     }
 
-    /// Add a fixed result field
     pub fn fixed_result(
         mut self,
         name: T,

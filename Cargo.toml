@@ -2,7 +2,13 @@
 name = "panopticon-core"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 license = "GPL-3.0-only"
+description = "An extensible data processing and templating engine."
+repository = "https://github.com/dolly-parseton/panopticon"
+readme = "README.md"
+authors = ["dolly-parseton"]
+keywords = ["pipeline", "data-processing", "templating", "etl", "polars"]
 
 [dependencies]
 anyhow = "1.0.100"

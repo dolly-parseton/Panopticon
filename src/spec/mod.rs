@@ -36,8 +36,6 @@ impl From<TypeDef<&'static str>> for TypeDef<String> {
     }
 }
 
-/// Extracts the inner FieldSpec vec from an ArrayOf(ObjectOf { fields }) TypeDef.
-/// Returns None if the TypeDef is not ArrayOf(ObjectOf).
 pub fn extract_object_fields<T: Into<String>>(ty: &TypeDef<T>) -> Option<&Vec<FieldSpec<T>>> {
     match ty {
         TypeDef::ArrayOf(inner) => match inner.as_ref() {
@@ -126,8 +124,6 @@ impl<T: Into<String> + Clone> ObjectFields<T> {
         Self::default()
     }
 
-    /// Add a literal field (ReferenceKind::Unsupported).
-    /// Returns Self AND a LiteralFieldRef — proof this field is safe for derived result names.
     pub fn add_literal(
         mut self,
         name: T,
@@ -146,8 +142,6 @@ impl<T: Into<String> + Clone> ObjectFields<T> {
         (self, handle)
     }
 
-    /// Add a template/reference field. No LiteralFieldRef returned —
-    /// cannot be used as a derived result name source.
     pub fn add_template(
         mut self,
         name: T,
