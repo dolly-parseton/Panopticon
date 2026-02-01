@@ -8,6 +8,7 @@ use super::{DEFAULT_NAME_POLICY, LiteralFieldRef, ObjectFields, extract_object_f
     Types:
     * CommandSpecBuilder - Builder for constructing (attributes, results) pairs with validation
     * PendingAttribute - Intermediate state while an ArrayOf(ObjectOf) attribute's fields are being built
+    * AttributeSpecBuilder - Builder for constructing AttributeSpec
 */
 
 pub struct CommandSpecBuilder<T: Into<String>> {
@@ -162,5 +163,58 @@ impl<T: Into<String> + Clone + PartialEq + std::fmt::Debug> PendingAttribute<T> 
             reference_kind: ReferenceKind::Unsupported,
         });
         builder
+    }
+}
+
+pub struct AttributeSpecBuilder<T: Into<String>> {
+    name: T,
+    ty: TypeDef<T>,
+    required: bool,
+    hint: Option<T>,
+    default_value: Option<ScalarValue>,
+    reference_kind: ReferenceKind,
+}
+
+impl<T: Into<String>> AttributeSpecBuilder<T> {
+    pub fn new(name: T, ty: TypeDef<T>) -> Self {
+        Self {
+            name,
+            ty,
+            required: false,
+            hint: None,
+            default_value: None,
+            reference_kind: ReferenceKind::Unsupported,
+        }
+    }
+
+    pub fn required(mut self) -> Self {
+        self.required = true;
+        self
+    }
+
+    pub fn hint(mut self, hint: T) -> Self {
+        self.hint = Some(hint);
+        self
+    }
+
+    pub fn default_value(mut self, value: ScalarValue) -> Self {
+        self.default_value = Some(value);
+        self
+    }
+
+    pub fn reference(mut self, kind: ReferenceKind) -> Self {
+        self.reference_kind = kind;
+        self
+    }
+
+    pub fn build(self) -> AttributeSpec<T> {
+        AttributeSpec {
+            name: self.name,
+            ty: self.ty,
+            required: self.required,
+            hint: self.hint,
+            default_value: self.default_value,
+            reference_kind: self.reference_kind,
+        }
     }
 }

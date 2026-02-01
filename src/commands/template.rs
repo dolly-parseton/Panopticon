@@ -30,38 +30,32 @@ static TEMPLATECOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
 
     pending
             .finalise_attribute(fields)
-            .attribute(AttributeSpec {
-                name: "template_glob",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: false,
-                hint: Some("Glob pattern to load templates from disk (e.g., 'templates/**/*.tera'). Can be combined with 'templates' (supports Tera substitution). Dependencies within external files are not validated prior to execution"),
-                default_value: None,
-                reference_kind: ReferenceKind::StaticTeraTemplate,
-            })
-            .attribute(AttributeSpec {
-                name: "render",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: Some("Name of the template to render (supports Tera substitution)"),
-                default_value: None,
-                reference_kind: ReferenceKind::StaticTeraTemplate,
-            })
-            .attribute(AttributeSpec {
-                name: "output",
-                ty: TypeDef::Scalar(ScalarType::String),
-                required: true,
-                hint: Some("File path to write the rendered output (supports Tera substitution)"),
-                default_value: None,
-                reference_kind: ReferenceKind::StaticTeraTemplate,
-            })
-            .attribute(AttributeSpec {
-                name: "capture",
-                ty: TypeDef::Scalar(ScalarType::Bool),
-                required: false,
-                hint: Some("If true, store the rendered content in the 'content' result"),
-                default_value: Some(ScalarValue::Bool(false)),
-                reference_kind: ReferenceKind::Unsupported,
-            })
+            .attribute(
+                AttributeSpecBuilder::new("template_glob", TypeDef::Scalar(ScalarType::String))
+                    .hint("Glob pattern to load templates from disk (e.g., 'templates/**/*.tera'). Can be combined with 'templates' (supports Tera substitution). Dependencies within external files are not validated prior to execution")
+                    .reference(ReferenceKind::StaticTeraTemplate)
+                    .build(),
+            )
+            .attribute(
+                AttributeSpecBuilder::new("render", TypeDef::Scalar(ScalarType::String))
+                    .required()
+                    .hint("Name of the template to render (supports Tera substitution)")
+                    .reference(ReferenceKind::StaticTeraTemplate)
+                    .build(),
+            )
+            .attribute(
+                AttributeSpecBuilder::new("output", TypeDef::Scalar(ScalarType::String))
+                    .required()
+                    .hint("File path to write the rendered output (supports Tera substitution)")
+                    .reference(ReferenceKind::StaticTeraTemplate)
+                    .build(),
+            )
+            .attribute(
+                AttributeSpecBuilder::new("capture", TypeDef::Scalar(ScalarType::Bool))
+                    .hint("If true, store the rendered content in the 'content' result")
+                    .default_value(ScalarValue::Bool(false))
+                    .build(),
+            )
             .fixed_result("line_count", TypeDef::Scalar(ScalarType::Number), Some("Number of lines in the rendered output"), ResultKind::Meta)
             .fixed_result("size", TypeDef::Scalar(ScalarType::Number), Some("Size in bytes of the rendered output"), ResultKind::Meta)
             .fixed_result("content", TypeDef::Scalar(ScalarType::String), Some("The rendered content (only populated when 'capture' is true, otherwise empty)"), ResultKind::Data)

@@ -2,14 +2,13 @@ use crate::imports::*;
 use polars::prelude::*;
 
 static AGGREGATECOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
-    let builder = CommandSpecBuilder::new().attribute(AttributeSpec {
-        name: "source",
-        ty: TypeDef::Scalar(ScalarType::String),
-        required: true,
-        hint: Some("Path to tabular data in store (e.g., 'query.results.data')"),
-        default_value: None,
-        reference_kind: ReferenceKind::StorePath,
-    });
+    let builder = CommandSpecBuilder::new().attribute(
+        AttributeSpecBuilder::new("source", TypeDef::Scalar(ScalarType::String))
+            .required()
+            .hint("Path to tabular data in store (e.g., 'query.results.data')")
+            .reference(ReferenceKind::StorePath)
+            .build(),
+    );
 
     let (pending, fields) = builder.array_of_objects(
         "aggregations",

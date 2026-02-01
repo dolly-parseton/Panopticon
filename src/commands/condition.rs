@@ -30,14 +30,12 @@ static CONDITIONCOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
 
     pending
         .finalise_attribute(fields)
-        .attribute(AttributeSpec {
-            name: "default",
-            ty: TypeDef::Scalar(ScalarType::String),
-            required: false,
-            hint: Some("Default value if no branch matches (supports Tera substitution)"),
-            default_value: None,
-            reference_kind: ReferenceKind::StaticTeraTemplate,
-        })
+        .attribute(
+            AttributeSpecBuilder::new("default", TypeDef::Scalar(ScalarType::String))
+                .hint("Default value if no branch matches (supports Tera substitution)")
+                .reference(ReferenceKind::StaticTeraTemplate)
+                .build(),
+        )
         .fixed_result(
             "result",
             TypeDef::Scalar(ScalarType::String),

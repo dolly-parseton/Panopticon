@@ -41,13 +41,13 @@ pub mod extend {
         DEFAULT_NAME_POLICY, FieldSpec, LiteralFieldRef, NamePolicy, ObjectFields, ReferenceKind,
         TypeDef,
         attribute::{AttributeSpec, Attributes},
-        builder::{CommandSpecBuilder, PendingAttribute},
+        builder::{AttributeSpecBuilder, CommandSpecBuilder, PendingAttribute},
         result::{ResultKind, ResultSpec},
     };
 
     // Value types - used in trait signatures and command implementations
     pub use crate::values::context::ExecutionContext;
-    pub use crate::values::helpers::InsertBatch;
+    pub use crate::values::helpers::{InsertBatch, to_scalar};
     pub use crate::values::scalar::{ScalarAsExt, ScalarMapExt, ScalarType};
 
     // Command helper type for LazyLock-time CommandSchemas

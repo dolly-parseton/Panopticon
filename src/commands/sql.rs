@@ -24,14 +24,13 @@ static SQLCOMMAND_SPEC: CommandSchema = LazyLock::new(|| {
 
     pending
         .finalise_attribute(fields)
-        .attribute(AttributeSpec {
-            name: "query",
-            ty: TypeDef::Scalar(ScalarType::String),
-            required: true,
-            hint: Some("SQL query to execute (supports Tera substitution)"),
-            default_value: None,
-            reference_kind: ReferenceKind::StaticTeraTemplate,
-        })
+        .attribute(
+            AttributeSpecBuilder::new("query", TypeDef::Scalar(ScalarType::String))
+                .required()
+                .hint("SQL query to execute (supports Tera substitution)")
+                .reference(ReferenceKind::StaticTeraTemplate)
+                .build(),
+        )
         .fixed_result(
             "data",
             TypeDef::Tabular,
