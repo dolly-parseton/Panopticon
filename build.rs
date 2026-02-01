@@ -5,29 +5,21 @@ fn main() {
     // Tell Cargo to rerun this script if Cargo.toml changes (tera version updates)
     println!("cargo:rerun-if-changed=Cargo.toml");
 
-    // Parse Cargo.toml to get tera version
-    let manifest = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
-
-    let tera_version =
-        extract_tera_version(&manifest).expect("Failed to find tera version in Cargo.toml");
-
-    // println!("cargo:warning=Detected tera version: {}", tera_version);
-
-    let pest_url = format!(
-        "https://raw.githubusercontent.com/Keats/tera/v{}/src/parser/tera.pest",
-        tera_version
-    );
-
     let dest_path = Path::new("src").join("tera.pest");
 
-    let needs_download = if dest_path.exists() {
-        let existing_content = fs::read_to_string(&dest_path).unwrap_or_default();
-        !existing_content.contains(&format!("tera v{}", tera_version))
-    } else {
-        true
-    };
+    // If the pest file already exists (e.g. in a published crate), skip everything.
+    // Only parse the version and download when the file is missing.
+    if !dest_path.exists() {
+        // Parse Cargo.toml to get tera version
+        let manifest = fs::read_to_string("Cargo.toml").expect("Failed to read Cargo.toml");
 
-    if needs_download {
+        let tera_version =
+            extract_tera_version(&manifest).expect("Failed to find tera version in Cargo.toml");
+
+        let pest_url = format!(
+            "https://raw.githubusercontent.com/Keats/tera/v{}/src/parser/tera.pest",
+            tera_version
+        );
         println!(
             "cargo:warning=Downloading tera.pest for version {}",
             tera_version
@@ -55,9 +47,6 @@ fn main() {
 
         println!("cargo:warning=Successfully downloaded tera.pest");
     }
-    // else {
-    //     println!("cargo:warning=tera.pest is up to date");
-    // }
 }
 
 fn extract_tera_version(manifest: &str) -> Option<String> {
