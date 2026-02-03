@@ -19,13 +19,17 @@ mod sealed {
 
 #[derive(Clone, Debug, Default)]
 pub struct ExecutionContext {
+    services: PipelineServices,
+    extensions: Extensions,
     scalar_store: ScalarStore,
     tabular_store: TabularStore,
 }
 
 impl ExecutionContext {
-    pub fn new() -> Self {
+    pub fn new(services: PipelineServices) -> Self {
         ExecutionContext {
+            services,
+            extensions: Extensions::new(),
             scalar_store: ScalarStore::new(),
             tabular_store: TabularStore::new(),
         }
@@ -41,5 +45,13 @@ impl ExecutionContext {
 
     pub async fn substitute<T: Into<String>>(&self, template: T) -> Result<String> {
         self.scalar_store.render_template(template.into()).await
+    }
+
+    pub fn extensions(&self) -> &Extensions {
+        &self.extensions
+    }
+
+    pub fn services(&self) -> &PipelineServices {
+        &self.services
     }
 }

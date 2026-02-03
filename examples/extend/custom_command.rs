@@ -111,11 +111,13 @@ async fn main() -> anyhow::Result<()> {
     // Seed a value into the context via a static namespace
     let mut pipeline = Pipeline::new();
 
-    pipeline.add_namespace(
-        NamespaceBuilder::new("inputs")
-            .static_ns()
-            .insert("greeting", ScalarValue::String("Hello, world!".to_string())),
-    )?;
+    pipeline
+        .add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("greeting", ScalarValue::String("Hello, world!".to_string())),
+        )
+        .await?;
 
     // Use the custom command with a Tera template referencing the static value
     let attrs = ObjectBuilder::new()
@@ -123,11 +125,13 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("demo"))?
-        .add_command::<ReverseCommand>("reverse", &attrs)?;
+        .add_namespace(NamespaceBuilder::new("demo"))
+        .await?
+        .add_command::<ReverseCommand>("reverse", &attrs)
+        .await?;
 
     // Execute the pipeline
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     // Retrieve and print results

@@ -38,8 +38,10 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("data"))?
-        .add_command::<FileCommand>("load", &file_attrs)?;
+        .add_namespace(NamespaceBuilder::new("data"))
+        .await?
+        .add_command::<FileCommand>("load", &file_attrs)
+        .await?;
 
     // --- Aggregate: multiple operations on product columns ---
     let agg_attrs = ObjectBuilder::new()
@@ -81,11 +83,13 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("stats"))?
-        .add_command::<AggregateCommand>("products", &agg_attrs)?;
+        .add_namespace(NamespaceBuilder::new("stats"))
+        .await?
+        .add_command::<AggregateCommand>("products", &agg_attrs)
+        .await?;
 
     // --- Execute with custom output path ---
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let settings = ResultSettings::new().with_output_path(output_dir.path().to_path_buf());
     let results = completed.results(settings).await?;
 

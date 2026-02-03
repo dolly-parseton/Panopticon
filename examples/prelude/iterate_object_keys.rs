@@ -13,16 +13,18 @@ async fn main() -> anyhow::Result<()> {
     let mut pipeline = Pipeline::new();
 
     // --- Static namespace: an object whose keys we will iterate ---
-    pipeline.add_namespace(
-        NamespaceBuilder::new("config").static_ns().insert(
-            "regions",
-            ObjectBuilder::new()
-                .insert("us-east", "Virginia")
-                .insert("us-west", "Oregon")
-                .insert("eu-west", "Ireland")
-                .build_scalar(),
-        ),
-    )?;
+    pipeline
+        .add_namespace(
+            NamespaceBuilder::new("config").static_ns().insert(
+                "regions",
+                ObjectBuilder::new()
+                    .insert("us-east", "Virginia")
+                    .insert("us-west", "Oregon")
+                    .insert("eu-west", "Ireland")
+                    .build_scalar(),
+            ),
+        )
+        .await?;
 
     // --- Iterative namespace: loop over each region key ---
     // region = key name (e.g. "us-east"), idx = 0, 1, 2 ...
@@ -45,18 +47,22 @@ async fn main() -> anyhow::Result<()> {
         .insert("default", "Region {{ region }} is in an unknown area")
         .build_hashmap();
 
-    let mut handle = pipeline.add_namespace(
-        NamespaceBuilder::new("classify")
-            .iterative()
-            .store_path(StorePath::from_segments(["config", "regions"]))
-            .scalar_object_keys(None, false)
-            .iter_var("region")
-            .index_var("idx"),
-    )?;
-    handle.add_command::<ConditionCommand>("region", &condition_attrs)?;
+    let mut handle = pipeline
+        .add_namespace(
+            NamespaceBuilder::new("classify")
+                .iterative()
+                .store_path(StorePath::from_segments(["config", "regions"]))
+                .scalar_object_keys(None, false)
+                .iter_var("region")
+                .index_var("idx"),
+        )
+        .await?;
+    handle
+        .add_command::<ConditionCommand>("region", &condition_attrs)
+        .await?;
 
     // --- Execute ---
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     // --- Print results per iteration ---

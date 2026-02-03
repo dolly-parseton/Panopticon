@@ -16,8 +16,8 @@ pub struct Completed {
     context: ExecutionContext,
 }
 
-#[derive(Default)]
 pub struct Pipeline<T = Draft> {
+    pub(crate) services: PipelineServices,
     pub(crate) namespaces: Vec<Namespace>,
     pub(crate) commands: Vec<CommandSpec>,
     state: T,
@@ -26,6 +26,18 @@ pub struct Pipeline<T = Draft> {
 impl Default for Pipeline<Draft> {
     fn default() -> Self {
         Pipeline {
+            services: PipelineServices::default(),
+            namespaces: Vec::new(),
+            commands: Vec::new(),
+            state: Draft,
+        }
+    }
+}
+
+impl Pipeline<Draft> {
+    pub fn with_services(services: PipelineServices) -> Self {
+        Pipeline {
+            services,
             namespaces: Vec::new(),
             commands: Vec::new(),
             state: Draft,

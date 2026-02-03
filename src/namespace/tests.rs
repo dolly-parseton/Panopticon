@@ -20,7 +20,7 @@ async fn test_extract_items_scalar_array() {
         .build()
         .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     // Insert the namespace values into the context scalar store
     if let ExecutionMode::Static { values } = inputs_ns.ty() {
@@ -68,7 +68,7 @@ async fn test_extract_items_scalar_array_with_range() {
         .build()
         .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     // Insert the namespace values into the context scalar store
     if let ExecutionMode::Static { values } = inputs_ns.ty() {
@@ -109,7 +109,7 @@ async fn test_extract_items_string_split() {
         .build()
         .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     // Insert the namespace values into the context scalar store
     if let ExecutionMode::Static { values } = inputs_ns.ty() {
@@ -155,7 +155,7 @@ async fn test_extract_items_scalar_object_keys_all() {
         .build()
         .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     // Insert the namespace values into the context scalar store
     if let ExecutionMode::Static { values } = inputs_ns.ty() {
@@ -207,7 +207,7 @@ async fn test_extract_items_scalar_object_keys_filtered() {
         .build()
         .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     // Insert the namespace values into the context scalar store
     if let ExecutionMode::Static { values } = inputs_ns.ty() {
@@ -259,7 +259,7 @@ async fn test_extract_items_scalar_object_keys_excluded() {
         .build()
         .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     // Insert the namespace values into the context scalar store
     if let ExecutionMode::Static { values } = inputs_ns.ty() {
@@ -315,7 +315,7 @@ async fn test_extract_items_tabular_column() {
     ])
     .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
     let store_path = StorePath::from_segments(["test", "df"]);
     context.tabular().insert(&store_path, df).await.unwrap();
 
@@ -354,7 +354,7 @@ async fn test_extract_items_tabular_column_with_range() {
     ])
     .unwrap();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
     let store_path = StorePath::from_segments(["test", "categories"]);
     context.tabular().insert(&store_path, df).await.unwrap();
 
@@ -378,7 +378,7 @@ async fn test_extract_items_tabular_column_with_range() {
 async fn test_extract_items_error_on_single_namespace() {
     init_tracing();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
     let ns_type = ExecutionMode::Once;
 
     let result = ns_type.resolve_iter_values(&context).await;
@@ -395,7 +395,7 @@ async fn test_extract_items_error_on_single_namespace() {
 async fn test_extract_items_error_key_not_found() {
     init_tracing();
 
-    let context = ExecutionContext::new();
+    let context = ExecutionContext::default();
 
     let ns_type = ExecutionMode::Iterative {
         store_path: StorePath::from_segments(["nonexistent", "key"]),
@@ -421,10 +421,7 @@ async fn test_insert_raw_renders_in_tera_template() {
         .insert_raw("item", ScalarValue::String("hello".to_string()))
         .await
         .unwrap();
-    store
-        .insert_raw("idx", to_scalar::i64(42))
-        .await
-        .unwrap();
+    store.insert_raw("idx", to_scalar::i64(42)).await.unwrap();
 
     // Verify both render correctly in templates
     let result = store.render_template("{{ item }}").await.unwrap();
@@ -455,35 +452,31 @@ async fn test_iterative_pipeline_indexed_outputs() {
 
     // Static source data
     pipeline
-        .add_namespace(
-            NamespaceBuilder::new("source")
-                .static_ns()
-                .insert(
-                    "items",
-                    ScalarValue::Array(vec![
-                        ScalarValue::String("alpha".to_string()),
-                        ScalarValue::String("beta".to_string()),
-                    ]),
-                ),
-        )
+        .add_namespace(NamespaceBuilder::new("source").static_ns().insert(
+            "items",
+            ScalarValue::Array(vec![
+                ScalarValue::String("alpha".to_string()),
+                ScalarValue::String("beta".to_string()),
+            ]),
+        ))
+        .await
         .unwrap();
 
     // Iterative namespace with a TemplateCommand
     let attrs = ObjectBuilder::new()
         .insert(
             "templates",
-            ScalarValue::Array(vec![ObjectBuilder::new()
-                .insert("name", "tpl")
-                .insert("content", "Value: {{ item }}")
-                .build_scalar()]),
+            ScalarValue::Array(vec![
+                ObjectBuilder::new()
+                    .insert("name", "tpl")
+                    .insert("content", "Value: {{ item }}")
+                    .build_scalar(),
+            ]),
         )
         .insert("render", "tpl")
         .insert(
             "output",
-            format!(
-                "{}/out_{{{{ idx }}}}.txt",
-                temp_dir.path().display()
-            ),
+            format!("{}/out_{{{{ idx }}}}.txt", temp_dir.path().display()),
         )
         .insert("capture", true)
         .build_hashmap();
@@ -497,10 +490,14 @@ async fn test_iterative_pipeline_indexed_outputs() {
                 .iter_var("item")
                 .index_var("idx"),
         )
+        .await
         .unwrap();
-    handle.add_command::<TemplateCommand>("render", &attrs).unwrap();
+    handle
+        .add_command::<TemplateCommand>("render", &attrs)
+        .await
+        .unwrap();
 
-    let completed = pipeline.compile().unwrap().execute().await.unwrap();
+    let completed = pipeline.compile().await.unwrap().execute().await.unwrap();
 
     let results = completed
         .results(ResultSettings {
@@ -514,8 +511,12 @@ async fn test_iterative_pipeline_indexed_outputs() {
     let prefix_0 = StorePath::from_segments(["process", "render", "0"]);
     let prefix_1 = StorePath::from_segments(["process", "render", "1"]);
 
-    let result_0 = results.get_by_source(&prefix_0).expect("missing result for iteration 0");
-    let result_1 = results.get_by_source(&prefix_1).expect("missing result for iteration 1");
+    let result_0 = results
+        .get_by_source(&prefix_0)
+        .expect("missing result for iteration 0");
+    let result_1 = results
+        .get_by_source(&prefix_1)
+        .expect("missing result for iteration 1");
 
     let content_0 = result_0
         .data_get(&prefix_0.with_segment("content"))

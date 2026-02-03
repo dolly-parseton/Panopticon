@@ -25,42 +25,47 @@ impl Executable for ExecutableWrapper {
         // Capture Instant::now() before execution starts
         let start_time = std::time::Instant::now();
 
-        // Evaluate when condition
-        let skip: bool = {
-            if let Some(condition) = &self.when {
-                let template = format!("{{{{ {} }}}}", condition);
-                let result = context.substitute(&template).await?;
-                !is_truthy(&parse_scalar(&result))
-            } else {
-                false
-            }
-        };
-
-        let result = match skip {
-            true => {
-                tracing::debug!("Skipping command - 'when' condition is false");
-                Ok(())
-            }
-            false => self.inner.execute(context, output_prefix).await,
-        };
-
-        // Now execution is complete log duration inside context using the output prefix
-        let duration = start_time.elapsed().as_millis() as u64;
         let batch = InsertBatch::new(context, output_prefix);
-        batch.u64("duration_ms", duration).await?;
-        // Set status based on execution result
-        match (skip, &result) {
-            (true, _) => {
+
+        // Evaluate when condition
+        if let Some(condition) = &self.when {
+            let template = format!("{{{{ {} }}}}", condition);
+            let result = context.substitute(&template).await?;
+            if !is_truthy(&parse_scalar(&result)) {
+                tracing::debug!("Skipping command - 'when' condition is false");
                 batch
                     .string("status", EXECUTION_STATUS_SKIPPED.to_string())
                     .await?;
+                batch
+                    .u64("duration_ms", start_time.elapsed().as_millis() as u64)
+                    .await?;
+                return Ok(());
             }
-            (false, Ok(_)) => {
+        }
+
+        // Check for cancellation
+        if context.extensions().is_canceled() {
+            tracing::debug!("Skipping command - cancelled");
+            batch
+                .string("status", EXECUTION_STATUS_CANCELLED.to_string())
+                .await?;
+            batch
+                .u64("duration_ms", start_time.elapsed().as_millis() as u64)
+                .await?;
+            return Ok(());
+        }
+
+        let result = self.inner.execute(context, output_prefix).await;
+        let duration = start_time.elapsed().as_millis() as u64;
+        batch.u64("duration_ms", duration).await?;
+        // Set status based on execution result
+        match &result {
+            Ok(_) => {
                 batch
                     .string("status", EXECUTION_STATUS_SUCCESS.to_string())
                     .await?;
             }
-            (false, Err(_)) => {
+            Err(_) => {
                 batch
                     .string("status", EXECUTION_STATUS_ERROR.to_string())
                     .await?;
@@ -95,6 +100,7 @@ pub const COMMON_ATTRIBUTES: &[AttributeSpec<&'static str>] = &[AttributeSpec {
 pub const EXECUTION_STATUS_SUCCESS: &str = "success";
 pub const EXECUTION_STATUS_SKIPPED: &str = "skipped";
 pub const EXECUTION_STATUS_ERROR: &str = "error";
+pub const EXECUTION_STATUS_CANCELLED: &str = "cancelled";
 
 pub const COMMON_RESULTS: &[ResultSpec<&'static str>] = &[
     ResultSpec::Field {
@@ -107,7 +113,9 @@ pub const COMMON_RESULTS: &[ResultSpec<&'static str>] = &[
         name: "status",
         ty: TypeDef::Scalar(ScalarType::String),
         kind: ResultKind::Meta,
-        hint: Some("Execution status of the command: 'success', 'skipped', or 'error'"),
+        hint: Some(
+            "Execution status of the command: 'success', 'skipped', 'error', or 'cancelled'",
+        ),
     },
 ];
 

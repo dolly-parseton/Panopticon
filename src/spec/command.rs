@@ -7,6 +7,7 @@ use crate::imports::*;
 pub struct CommandSpec {
     pub namespace_index: usize,
     pub name: String,
+    pub command_type: String,
     pub attributes: Attributes,
     pub builder: CommandFactory,
     pub exepected_attributes: Vec<AttributeSpec<String>>,
@@ -24,6 +25,7 @@ impl CommandSpec {
         Ok(CommandSpec {
             namespace_index,
             name,
+            command_type: T::command_type().to_string(),
             attributes,
             builder: T::factory(),
             exepected_attributes: T::available_attributes()

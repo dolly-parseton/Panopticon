@@ -43,8 +43,10 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("data"))?
-        .add_command::<FileCommand>("load", &file_attrs)?;
+        .add_namespace(NamespaceBuilder::new("data"))
+        .await?
+        .add_command::<FileCommand>("load", &file_attrs)
+        .await?;
 
     // Query: all users sorted by age
     let sql_attrs = ObjectBuilder::new()
@@ -61,11 +63,13 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("query"))?
-        .add_command::<SqlCommand>("sorted", &sql_attrs)?;
+        .add_namespace(NamespaceBuilder::new("query"))
+        .await?
+        .add_command::<SqlCommand>("sorted", &sql_attrs)
+        .await?;
 
     // Execute pass 1
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     let query_source = StorePath::from_segments(["query", "sorted"]);
@@ -112,11 +116,13 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("stats"))?
-        .add_command::<AggregateCommand>("users", &agg_attrs)?;
+        .add_namespace(NamespaceBuilder::new("stats"))
+        .await?
+        .add_command::<AggregateCommand>("users", &agg_attrs)
+        .await?;
 
     // Re-compile and execute
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     // Original query results are still present

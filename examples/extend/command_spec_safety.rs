@@ -22,11 +22,8 @@ fn main() {
 
     println!("=== 1. Valid derived_result with LiteralFieldRef ===\n");
     {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "items",
-            true,
-            Some("Array of named items"),
-        );
+        let (pending, fields) =
+            CommandSpecBuilder::new().array_of_objects("items", true, Some("Array of named items"));
 
         // add_literal returns (ObjectFields, LiteralFieldRef)
         let (fields, name_ref) = fields.add_literal(
@@ -41,7 +38,11 @@ fn main() {
             .derived_result("items", name_ref, None, ResultKind::Data)
             .build();
 
-        println!("  Built {} attribute(s), {} result(s)", attrs.len(), results.len());
+        println!(
+            "  Built {} attribute(s), {} result(s)",
+            attrs.len(),
+            results.len()
+        );
         println!("  OK: derived_result accepted the LiteralFieldRef\n");
     }
 
@@ -55,18 +56,10 @@ fn main() {
 
     println!("=== 2. Template fields: no LiteralFieldRef available ===\n");
     {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "items",
-            true,
-            None,
-        );
+        let (pending, fields) = CommandSpecBuilder::new().array_of_objects("items", true, None);
 
-        let (fields, name_ref) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            None,
-        );
+        let (fields, name_ref) =
+            fields.add_literal("name", TypeDef::Scalar(ScalarType::String), true, None);
 
         // add_template returns just ObjectFields — no LiteralFieldRef
         let fields = fields.add_template(
@@ -116,26 +109,16 @@ fn main() {
             )
             .build();
     });
-    println!(
-        "  attribute(\"item\"): {}",
-        format_panic_result(&result)
-    );
+    println!("  attribute(\"item\"): {}", format_panic_result(&result));
 
     // 3b. Reserved field name "index"
     let result = panic::catch_unwind(|| {
         let fields = ObjectFields::<&str>::new();
-        let (fields, _) = fields.add_literal(
-            "index",
-            TypeDef::Scalar(ScalarType::Number),
-            true,
-            None,
-        );
+        let (fields, _) =
+            fields.add_literal("index", TypeDef::Scalar(ScalarType::Number), true, None);
         fields.build();
     });
-    println!(
-        "  field(\"index\"):    {}",
-        format_panic_result(&result)
-    );
+    println!("  field(\"index\"):    {}", format_panic_result(&result));
 
     // 3c. Forbidden characters: dots
     let result = panic::catch_unwind(|| {
@@ -148,10 +131,7 @@ fn main() {
             )
             .build();
     });
-    println!(
-        "  result(\"bad.name\"): {}",
-        format_panic_result(&result)
-    );
+    println!("  result(\"bad.name\"): {}", format_panic_result(&result));
 
     // 3d. Forbidden characters: spaces
     let result = panic::catch_unwind(|| {
@@ -181,17 +161,9 @@ fn main() {
 
     // 4a. derived_result references a nonexistent attribute
     let result = panic::catch_unwind(|| {
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "things",
-            true,
-            None,
-        );
-        let (fields, name_ref) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            None,
-        );
+        let (pending, fields) = CommandSpecBuilder::new().array_of_objects("things", true, None);
+        let (fields, name_ref) =
+            fields.add_literal("name", TypeDef::Scalar(ScalarType::String), true, None);
 
         pending
             .finalise_attribute(fields)
@@ -208,17 +180,10 @@ fn main() {
     let result = panic::catch_unwind(|| {
         // We need a LiteralFieldRef to even call derived_result.
         // Create one from a legitimate array_of_objects, then misuse it.
-        let (pending, fields) = CommandSpecBuilder::new().array_of_objects(
-            "valid_array",
-            true,
-            None,
-        );
-        let (fields, name_ref) = fields.add_literal(
-            "name",
-            TypeDef::Scalar(ScalarType::String),
-            true,
-            None,
-        );
+        let (pending, fields) =
+            CommandSpecBuilder::new().array_of_objects("valid_array", true, None);
+        let (fields, name_ref) =
+            fields.add_literal("name", TypeDef::Scalar(ScalarType::String), true, None);
 
         pending
             .finalise_attribute(fields)
@@ -288,13 +253,19 @@ fn main() {
         println!("  Fields: name (literal), expression (template), description (literal)");
         println!("  LiteralFieldRefs obtained: name_ref, _desc_ref");
         println!("  derived_result uses name_ref — template field \"expression\" cannot be used");
-        println!("  Built {} attribute(s), {} result(s)", attrs.len(), results.len());
+        println!(
+            "  Built {} attribute(s), {} result(s)",
+            attrs.len(),
+            results.len()
+        );
     }
 
     println!("\nAll examples completed.");
 }
 
-fn format_panic_result<T>(result: &std::result::Result<T, Box<dyn std::any::Any + Send>>) -> String {
+fn format_panic_result<T>(
+    result: &std::result::Result<T, Box<dyn std::any::Any + Send>>,
+) -> String {
     match result {
         Ok(_) => "OK (no panic)".to_string(),
         Err(payload) => {

@@ -5,13 +5,14 @@ use crate::namespace::sealed::Build;
 impl Pipeline<Draft> {
     pub fn new() -> Self {
         Pipeline {
+            services: PipelineServices::default(),
             namespaces: Vec::new(),
             commands: Vec::new(),
             state: Draft,
         }
     }
 
-    pub fn add_namespace<T>(
+    pub async fn add_namespace<T>(
         &mut self,
         namespace: NamespaceBuilder<T>,
     ) -> Result<NamespaceHandle<'_, T>>
@@ -62,6 +63,13 @@ impl Pipeline<Draft> {
         }
         self.namespaces.push(namespace);
         let index = self.namespaces.len() - 1;
+        self.services
+            .after_added_namespace(hook_events::NamespaceInit {
+                namespace_index: index,
+                namespace_name: name.clone(),
+                namespace_type: ty.to_string(),
+            })
+            .await?;
         tracing::debug!(
             namespace_name = %name,
             namespace_type = %ty,
@@ -76,7 +84,7 @@ impl Pipeline<Draft> {
     }
 
     // Used by the namespace handle to add commands - hence pub(crate)
-    pub(crate) fn add_command<T>(
+    pub(crate) async fn add_command<T>(
         &mut self,
         namespace: usize,
         name: &str,
@@ -119,7 +127,13 @@ impl Pipeline<Draft> {
             name.to_string(),
             attrs.clone(),
         )?);
-
+        self.services
+            .after_added_command(hook_events::CommandInit {
+                namespace_index: namespace,
+                command_name: name.to_string(),
+                command_type: T::command_type().to_string(),
+            })
+            .await?;
         tracing::debug!(
             namespace = %ns_name,
             command_name = %cmd_name,
@@ -130,7 +144,13 @@ impl Pipeline<Draft> {
     }
 
     #[tracing::instrument(skip(self), err, fields(command_count = self.commands.len(), namespace_count = self.namespaces.len()))]
-    pub fn compile(self) -> Result<Pipeline<Ready>> {
+    pub async fn compile(self) -> Result<Pipeline<Ready>> {
+        self.services
+            .before_compile_pipeline(hook_events::PipelineInfo {
+                namespace_count: self.namespaces.len(),
+                command_count: self.commands.len(),
+            })
+            .await?;
         // Consolidate as much validation here as possible
         // Some are pretty unlikely given how the API is designed but I'm usabilitymaxxing.
 
@@ -224,9 +244,16 @@ impl Pipeline<Draft> {
 
             None of which are super easy but doable if I make a proper type for looking ahead at the specs by StorePath.
         */
-
+        self.services
+            .after_compile_pipeline(hook_events::PipelineCompiled {
+                namespace_count: self.namespaces.len(),
+                command_count: self.commands.len(),
+                compiled_at: Instant::now(),
+            })
+            .await?;
         tracing::debug!("Pipeline compilation successful");
         Ok(Pipeline::<Ready> {
+            services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
             state: Ready,

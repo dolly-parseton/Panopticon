@@ -48,7 +48,11 @@ impl Namespace {
         NamespaceBuilder::<sealed::Once>::new(name)
     }
 
-    pub(crate) fn new<T: Into<String>>(name: T, ty: ExecutionMode, _: sealed::BuilderToken) -> Self {
+    pub(crate) fn new<T: Into<String>>(
+        name: T,
+        ty: ExecutionMode,
+        _: sealed::BuilderToken,
+    ) -> Self {
         Namespace {
             name: name.into(),
             ty,
@@ -129,22 +133,24 @@ impl<'a, T> NamespaceHandle<'a, T> {
 }
 
 impl<'a> NamespaceHandle<'a, sealed::Once> {
-    pub fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
+    pub async fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
     where
         T: Command,
     {
         self.commands
             .add_command::<T>(self.namespace_index, name, attrs)
+            .await
     }
 }
 
 impl<'a> NamespaceHandle<'a, sealed::Iterative> {
-    pub fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
+    pub async fn add_command<T>(&mut self, name: &str, attrs: &Attributes) -> Result<()>
     where
         T: Command,
     {
         self.commands
             .add_command::<T>(self.namespace_index, name, attrs)
+            .await
     }
 }
 

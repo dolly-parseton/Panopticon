@@ -18,33 +18,41 @@ async fn main() -> anyhow::Result<()> {
     let mut pipeline = Pipeline::new();
 
     // --- Static namespace: provide data for the Tera templates ---
-    pipeline.add_namespace(
-        NamespaceBuilder::new("inputs")
-            .static_ns()
-            .insert("site_name", ScalarValue::String("Panopticon Demo".to_string()))
-            .insert("page_title", ScalarValue::String("Getting Started".to_string()))
-            .insert(
-                "page_content",
-                ScalarValue::String("Welcome to the Panopticon pipeline engine.".to_string()),
-            )
-            .insert(
-                "nav_items",
-                ScalarValue::Array(vec![
-                    ObjectBuilder::new()
-                        .insert("label", "Home")
-                        .insert("url", "/")
-                        .build_scalar(),
-                    ObjectBuilder::new()
-                        .insert("label", "Docs")
-                        .insert("url", "/docs")
-                        .build_scalar(),
-                    ObjectBuilder::new()
-                        .insert("label", "Examples")
-                        .insert("url", "/examples")
-                        .build_scalar(),
-                ]),
-            ),
-    )?;
+    pipeline
+        .add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert(
+                    "site_name",
+                    ScalarValue::String("Panopticon Demo".to_string()),
+                )
+                .insert(
+                    "page_title",
+                    ScalarValue::String("Getting Started".to_string()),
+                )
+                .insert(
+                    "page_content",
+                    ScalarValue::String("Welcome to the Panopticon pipeline engine.".to_string()),
+                )
+                .insert(
+                    "nav_items",
+                    ScalarValue::Array(vec![
+                        ObjectBuilder::new()
+                            .insert("label", "Home")
+                            .insert("url", "/")
+                            .build_scalar(),
+                        ObjectBuilder::new()
+                            .insert("label", "Docs")
+                            .insert("url", "/docs")
+                            .build_scalar(),
+                        ObjectBuilder::new()
+                            .insert("label", "Examples")
+                            .insert("url", "/examples")
+                            .build_scalar(),
+                    ]),
+                ),
+        )
+        .await?;
 
     // --- TemplateCommand: load templates via glob and render page.tera ---
     // page.tera extends base.tera and includes header.tera
@@ -54,19 +62,18 @@ async fn main() -> anyhow::Result<()> {
             format!("{}/**/*.tera", fixtures_dir().join("tera").display()),
         )
         .insert("render", "page.tera")
-        .insert(
-            "output",
-            format!("{}/page.html", temp_dir.path().display()),
-        )
+        .insert("output", format!("{}/page.html", temp_dir.path().display()))
         .insert("capture", true)
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("render"))?
-        .add_command::<TemplateCommand>("page", &template_attrs)?;
+        .add_namespace(NamespaceBuilder::new("render"))
+        .await?
+        .add_command::<TemplateCommand>("page", &template_attrs)
+        .await?;
 
     // --- Execute ---
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     // --- Print the captured output ---

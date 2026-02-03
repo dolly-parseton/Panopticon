@@ -1,7 +1,10 @@
 mod commands;
 mod dependencies;
+mod extensions;
 mod namespace;
 mod pipeline;
+#[allow(unused)] // TODO: Remove temporary allow
+mod services;
 mod spec;
 mod values;
 
@@ -17,6 +20,7 @@ pub mod prelude {
     // Pipeline
     pub use crate::pipeline::Pipeline;
     pub use crate::pipeline::results::{ResultSettings, ResultStore};
+    pub use crate::services::PipelineServices;
 
     // Namespace
     pub use crate::namespace::{Namespace, NamespaceBuilder};
@@ -35,6 +39,7 @@ pub mod extend {
     pub use crate::pipeline::traits::{
         Command, CommandFactory, Descriptor, Executable, FromAttributes,
     };
+    pub use crate::services::{EventHooks, PipelineIO};
 
     // Spec types - declare your command's attributes and results
     pub use crate::spec::{
@@ -44,6 +49,9 @@ pub mod extend {
         builder::{AttributeSpecBuilder, CommandSpecBuilder, PendingAttribute},
         result::{ResultKind, ResultSpec},
     };
+
+    // Extensions
+    // pub use crate::extensions::Extensions; < Don't think I need to export this, access using ExecutionContext::extensions() then use the methods?
 
     // Value types - used in trait signatures and command implementations
     pub use crate::values::context::ExecutionContext;
@@ -75,6 +83,12 @@ pub(crate) mod imports {
         ExecutionMode, IteratorType, NamespaceHandle, RESERVED_NAMESPACES,
     };
 
+    // Services internals
+    pub(crate) use crate::services::{EventHooks, PipelineIO, PipelineServices, hook_events};
+
+    // Extensions internals
+    pub(crate) use crate::extensions::Extensions;
+
     // Spec internals
     pub(crate) use crate::spec::command::CommandSpec;
 
@@ -92,6 +106,7 @@ pub(crate) mod imports {
     pub use std::collections::{HashMap, HashSet, VecDeque};
     pub use std::path::PathBuf;
     pub use std::sync::Arc;
+    pub use std::time::Instant;
     pub use tokio::sync::RwLock;
 }
 

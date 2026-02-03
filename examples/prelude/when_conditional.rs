@@ -23,15 +23,17 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn run_with_feature_flag(enabled: bool) -> anyhow::Result<()> {
-    let mut pipeline = Pipeline::new();
+    let mut pipeline = Pipeline::with_services(PipelineServices::defaults());
 
     // --- Static namespace: feature flag + user data ---
-    pipeline.add_namespace(
-        NamespaceBuilder::new("inputs")
-            .static_ns()
-            .insert("feature_enabled", ScalarValue::Bool(enabled))
-            .insert("user_name", ScalarValue::String("Alice".to_string())),
-    )?;
+    pipeline
+        .add_namespace(
+            NamespaceBuilder::new("inputs")
+                .static_ns()
+                .insert("feature_enabled", ScalarValue::Bool(enabled))
+                .insert("user_name", ScalarValue::String("Alice".to_string())),
+        )
+        .await?;
 
     // --- Command with `when` guard ---
     // The command is only executed when inputs.feature_enabled is truthy.
@@ -39,21 +41,25 @@ async fn run_with_feature_flag(enabled: bool) -> anyhow::Result<()> {
         .insert("when", "inputs.feature_enabled")
         .insert(
             "branches",
-            ScalarValue::Array(vec![ObjectBuilder::new()
-                .insert("name", "greeting")
-                .insert("if", "true")
-                .insert("then", "Hello, {{ inputs.user_name }}! Feature is active.")
-                .build_scalar()]),
+            ScalarValue::Array(vec![
+                ObjectBuilder::new()
+                    .insert("name", "greeting")
+                    .insert("if", "true")
+                    .insert("then", "Hello, {{ inputs.user_name }}! Feature is active.")
+                    .build_scalar(),
+            ]),
         )
         .insert("default", "Fallback message")
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("example"))?
-        .add_command::<ConditionCommand>("greeting", &attrs)?;
+        .add_namespace(NamespaceBuilder::new("example"))
+        .await?
+        .add_command::<ConditionCommand>("greeting", &attrs)
+        .await?;
 
     // --- Execute ---
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     // --- Inspect results ---

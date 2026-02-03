@@ -20,6 +20,13 @@ impl Pipeline<Completed> {
     ) -> Result<ResultStore> {
         use super::results::write_tabular;
 
+        self.services
+            .on_results_start(hook_events::PipelineInfo {
+                namespace_count: self.namespaces.len(),
+                command_count: self.commands.len(),
+            })
+            .await?;
+
         let context = &self.state.context;
 
         std::fs::create_dir_all(&output_path)
@@ -180,11 +187,20 @@ impl Pipeline<Completed> {
             "Collected results from pipeline execution"
         );
 
+        self.services
+            .on_results_finish(hook_events::PipelineCompleted {
+                namespace_count: self.namespaces.len(),
+                command_count: self.commands.len(),
+                completed_at: Instant::now(),
+            })
+            .await?;
+
         Ok(ResultStore { results })
     }
 
     pub fn restart(self) -> Pipeline<Ready> {
         Pipeline::<Ready> {
+            services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
             state: Ready,
@@ -193,6 +209,7 @@ impl Pipeline<Completed> {
 
     pub fn edit(self) -> Pipeline<Draft> {
         Pipeline::<Draft> {
+            services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
             state: Draft,

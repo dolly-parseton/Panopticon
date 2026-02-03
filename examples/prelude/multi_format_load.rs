@@ -25,7 +25,10 @@ async fn main() -> anyhow::Result<()> {
                     .insert("name", "users")
                     .insert(
                         "file",
-                        fixtures_dir().join("users.csv").to_string_lossy().to_string(),
+                        fixtures_dir()
+                            .join("users.csv")
+                            .to_string_lossy()
+                            .to_string(),
                     )
                     .insert("format", "csv")
                     .build_scalar(),
@@ -33,7 +36,10 @@ async fn main() -> anyhow::Result<()> {
                     .insert("name", "events")
                     .insert(
                         "file",
-                        fixtures_dir().join("events.json").to_string_lossy().to_string(),
+                        fixtures_dir()
+                            .join("events.json")
+                            .to_string_lossy()
+                            .to_string(),
                     )
                     .insert("format", "json")
                     .build_scalar(),
@@ -53,8 +59,10 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("data"))?
-        .add_command::<FileCommand>("load", &file_attrs)?;
+        .add_namespace(NamespaceBuilder::new("data"))
+        .await?
+        .add_command::<FileCommand>("load", &file_attrs)
+        .await?;
 
     // --- SQL join: users x events ---
     // Cross-join to pair each user with each event (small fixture data)
@@ -81,11 +89,13 @@ async fn main() -> anyhow::Result<()> {
         .build_hashmap();
 
     pipeline
-        .add_namespace(NamespaceBuilder::new("joined"))?
-        .add_command::<SqlCommand>("user_events", &join_attrs)?;
+        .add_namespace(NamespaceBuilder::new("joined"))
+        .await?
+        .add_command::<SqlCommand>("user_events", &join_attrs)
+        .await?;
 
     // --- Execute ---
-    let completed = pipeline.compile()?.execute().await?;
+    let completed = pipeline.compile().await?.execute().await?;
     let results = completed.results(ResultSettings::default()).await?;
 
     // --- Print file-load summary ---

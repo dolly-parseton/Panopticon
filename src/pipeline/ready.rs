@@ -7,8 +7,14 @@ impl Pipeline<Ready> {
     command_count = self.commands.len()
 ))]
     pub async fn execute(self) -> Result<Pipeline<Completed>> {
+        self.services
+            .before_execute_pipeline(hook_events::PipelineInfo {
+                namespace_count: self.namespaces.len(),
+                command_count: self.commands.len(),
+            })
+            .await?;
         // Create a new execution context
-        let context = ExecutionContext::new();
+        let context = ExecutionContext::new(self.services.clone());
         // Add in all "values" from Namespaces of type Static
         let mut static_count = 0u32;
         for namespace in &self.namespaces {
@@ -20,6 +26,7 @@ impl Pipeline<Ready> {
                 }
             }
         }
+
         tracing::debug!(
             static_value_count = static_count,
             "Inserted static values into ExecutionContext scalar store"
@@ -33,6 +40,13 @@ impl Pipeline<Ready> {
                 namespace_index,
                 commands,
             } = group_result?;
+            self.services
+                .before_execute_namespace(hook_events::NamespaceInfo {
+                    namespace_index,
+                    namespace_name: namespace.name().to_string(),
+                    command_count: commands.len(),
+                })
+                .await?;
             tracing::debug!(
                 namespace_index = namespace_index,
                 command_count = commands.len(),
@@ -99,10 +113,25 @@ impl Pipeline<Ready> {
                     );
                 }
             }
+            self.services
+                .after_execute_namespace(hook_events::NamespaceExecuted {
+                    namespace_index,
+                    namespace_name: namespace.name().to_string(),
+                    executed_at: Instant::now(),
+                })
+                .await?;
         }
 
         tracing::debug!("Completed execution of all Commands");
+        self.services
+            .after_execute_pipeline(hook_events::PipelineExecuted {
+                namespace_count: self.namespaces.len(),
+                command_count: self.commands.len(),
+                executed_at: Instant::now(),
+            })
+            .await?;
         Ok(Pipeline::<Completed> {
+            services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
             state: Completed { context },
@@ -117,7 +146,15 @@ impl Pipeline<Ready> {
         context: &ExecutionContext,
         iteration_index: Option<usize>,
     ) -> Result<()> {
-        for command_spec in commands {
+        for command_spec in commands.iter() {
+            self.services
+                .before_execute_command(hook_events::CommandInfo {
+                    namespace_index: command_spec.namespace_index,
+                    command_name: command_spec.name.clone(),
+                    command_type: command_spec.command_type.clone(),
+                    command_count: commands.len(),
+                })
+                .await?;
             // Run substitution on all string attributes.
             let substituted_attrs =
                 substitute_attributes(&command_spec.attributes, context, &command_spec.name)
@@ -129,12 +166,21 @@ impl Pipeline<Ready> {
                 output_prefix = output_prefix.with_index(idx);
             }
             command.execute(context, &output_prefix).await?;
+            self.services
+                .after_execute_command(hook_events::CommandExecuted {
+                    namespace_index: command_spec.namespace_index,
+                    command_name: command_spec.name.clone(),
+                    command_type: command_spec.command_type.clone(),
+                    executed_at: Instant::now(),
+                })
+                .await?;
         }
         Ok(())
     }
 
     pub fn edit(self) -> Pipeline<Draft> {
         Pipeline::<Draft> {
+            services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
             state: Draft,
