@@ -44,7 +44,7 @@ impl Executable for ExecutableWrapper {
         }
 
         // Check for cancellation
-        if context.extensions().is_canceled() {
+        if context.extensions().is_canceled().await {
             tracing::debug!("Skipping command - cancelled");
             batch
                 .string("status", EXECUTION_STATUS_CANCELLED.to_string())

@@ -15,29 +15,78 @@
 
 use crate::imports::*;
 use std::any::{Any, TypeId};
+use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
+
+/// Read-only guard for accessing extensions
+pub struct ExtensionsReadGuard<'a> {
+    guard: RwLockReadGuard<'a, HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
+}
+
+impl<'a> ExtensionsReadGuard<'a> {
+    pub fn get<T: 'static>(&self) -> Option<&T> {
+        self.guard.get(&TypeId::of::<T>())?.downcast_ref()
+    }
+
+    pub fn contains<T: 'static>(&self) -> bool {
+        self.guard.contains_key(&TypeId::of::<T>())
+    }
+}
+
+/// Read-write guard for modifying extensions
+pub struct ExtensionsWriteGuard<'a> {
+    guard: RwLockWriteGuard<'a, HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
+}
+
+impl<'a> ExtensionsWriteGuard<'a> {
+    pub fn get<T: 'static>(&self) -> Option<&T> {
+        self.guard.get(&TypeId::of::<T>())?.downcast_ref()
+    }
+
+    pub fn get_mut<T: 'static>(&mut self) -> Option<&mut T> {
+        self.guard.get_mut(&TypeId::of::<T>())?.downcast_mut()
+    }
+
+    pub fn insert<T: Send + Sync + 'static>(&mut self, val: T) {
+        self.guard.insert(TypeId::of::<T>(), Box::new(val));
+    }
+
+    pub fn remove<T: 'static>(&mut self) -> Option<T> {
+        self.guard
+            .remove(&TypeId::of::<T>())
+            .and_then(|b| b.downcast().ok())
+            .map(|b| *b)
+    }
+
+    pub fn contains<T: 'static>(&self) -> bool {
+        self.guard.contains_key(&TypeId::of::<T>())
+    }
+}
 
 #[derive(Clone)]
 pub struct Extensions {
-    map: HashMap<TypeId, Arc<Box<dyn Any + Send + Sync>>>,
+    map: Arc<RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>>,
+    keys: Vec<TypeId>, // For Debug purposes, since we can't use the async method to read it during Debug impl
 }
 
 impl std::fmt::Debug for Extensions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Extensions")
-            .field("keys", &self.map.keys().collect::<Vec<&TypeId>>())
+            .field("keys", &self.keys)
             .finish()
     }
 }
 
 impl Default for Extensions {
     fn default() -> Self {
-        let mut ext = Extensions {
-            map: HashMap::new(),
-        };
-        ext.insert::<tokio_util::sync::CancellationToken>(
-            tokio_util::sync::CancellationToken::new(),
+        let mut map = HashMap::new();
+        map.insert(
+            TypeId::of::<tokio_util::sync::CancellationToken>(),
+            Box::new(tokio_util::sync::CancellationToken::new()) as Box<dyn Any + Send + Sync>,
         );
-        ext
+        Extensions {
+            map: Arc::new(RwLock::new(map)),
+            keys: vec![TypeId::of::<tokio_util::sync::CancellationToken>()],
+        }
     }
 }
 
@@ -46,29 +95,36 @@ impl Extensions {
         Self::default()
     }
 
-    pub fn insert<T: Send + Sync + 'static>(&mut self, val: T) {
-        self.map.insert(TypeId::of::<T>(), Arc::new(Box::new(val)));
-    }
-
-    pub fn get<T: Send + Sync + 'static>(&self) -> Option<&T> {
-        self.map.get(&TypeId::of::<T>())?.downcast_ref()
-    }
-
-    // Helper methods for checking CancellationToken
-    pub fn cancel_token(&self) -> Option<&tokio_util::sync::CancellationToken> {
-        self.get::<tokio_util::sync::CancellationToken>()
-    }
-
-    pub fn is_canceled(&self) -> bool {
-        if let Some(token) = self.cancel_token() {
-            token.is_cancelled()
-        } else {
-            false
+    /// Acquire a read lock on the extensions map
+    pub async fn read(&self) -> ExtensionsReadGuard<'_> {
+        ExtensionsReadGuard {
+            guard: self.map.read().await,
         }
     }
 
-    pub fn cancel(&self) {
-        if let Some(token) = self.cancel_token() {
+    /// Acquire a write lock on the extensions map
+    pub async fn write(&self) -> ExtensionsWriteGuard<'_> {
+        ExtensionsWriteGuard {
+            guard: self.map.write().await,
+        }
+    }
+
+    // Convenience methods for CancellationToken
+
+    pub async fn is_canceled(&self) -> bool {
+        self.read()
+            .await
+            .get::<tokio_util::sync::CancellationToken>()
+            .map(|t| t.is_cancelled())
+            .unwrap_or(false)
+    }
+
+    pub async fn cancel(&self) {
+        if let Some(token) = self
+            .read()
+            .await
+            .get::<tokio_util::sync::CancellationToken>()
+        {
             token.cancel();
         }
     }
