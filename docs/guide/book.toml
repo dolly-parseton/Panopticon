@@ -1,0 +1,14 @@
+[book]
+title = "Panopticon Guide"
+authors = ["Panopticon Contributors"]
+description = "A guide to building declarative data pipelines with Panopticon"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/your-org/panopticon"
+edit-url-template = "https://github.com/your-org/panopticon/edit/main/docs/guide/{path}"

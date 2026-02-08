@@ -1,0 +1,815 @@
+<!DOCTYPE HTML>
+<html lang="en" class="rust sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Event Hooks - Extending Panopticon</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="A deep-dive into extending Panopticon with custom commands and services">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "rust";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-8b684716.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-f149ad64.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('rust')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Extending Panopticon</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/your-org/panopticon" title="Git repository" aria-label="Git repository">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg></span>
+                        </a>
+                        <a href="https://github.com/your-org/panopticon/edit/main/docs/extending/src/services/event-hooks.md" title="Suggest an edit" aria-label="Suggest an edit" rel="edit">
+                            <span class=fa-svg id="git-edit-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M421.7 220.3l-11.3 11.3-22.6 22.6-205 205c-6.6 6.6-14.8 11.5-23.8 14.1L30.8 511c-8.4 2.5-17.5 .2-23.7-6.1S-1.5 489.7 1 481.2L38.7 353.1c2.6-9 7.5-17.2 14.1-23.8l205-205 22.6-22.6 11.3-11.3 33.9 33.9 62.1 62.1 33.9 33.9zM96 353.9l-9.3 9.3c-.9 .9-1.6 2.1-2 3.4l-25.3 86 86-25.3c1.3-.4 2.5-1.1 3.4-2l9.3-9.3H112c-8.8 0-16-7.2-16-16V353.9zM453.3 19.3l39.4 39.4c25 25 25 65.5 0 90.5l-14.5 14.5-22.6 22.6-11.3 11.3-33.9-33.9-62.1-62.1L314.3 67.7l11.3-11.3 22.6-22.6 14.5-14.5c25-25 65.5-25 90.5 0z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="event-hooks"><a class="header" href="#event-hooks">Event Hooks</a></h1>
+<p>The <code>EventHooks</code> trait lets you observe and react to pipeline lifecycle events without modifying command logic. Hooks are ideal for cross-cutting concerns like logging, metrics, auditing, and debugging.</p>
+<h2 id="the-eventhooks-trait"><a class="header" href="#the-eventhooks-trait">The EventHooks Trait</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[async_trait]
+pub trait EventHooks: Send + Sync {
+    // Draft phase
+    async fn after_added_namespace(&amp;self, event: &amp;hook_events::NamespaceInit) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn after_added_command(&amp;self, event: &amp;hook_events::CommandInit) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn before_compile_pipeline(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn after_compile_pipeline(&amp;self, event: &amp;hook_events::PipelineCompiled) -&gt; Result&lt;()&gt; { Ok(()) }
+
+    // Ready phase
+    async fn before_execute_pipeline(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn after_execute_pipeline(&amp;self, event: &amp;hook_events::PipelineExecuted) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn before_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceInfo) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn after_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceExecuted) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn before_execute_command(&amp;self, event: &amp;hook_events::CommandInfo) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; { Ok(()) }
+
+    // Completed phase
+    async fn on_results_start(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; { Ok(()) }
+    async fn on_results_finish(&amp;self, event: &amp;hook_events::PipelineCompleted) -&gt; Result&lt;()&gt; { Ok(()) }
+}
+<span class="boring">}</span></code></pre>
+<p>All methods have default no-op implementations. Only override the hooks you care about.</p>
+<h3 id="trait-bounds"><a class="header" href="#trait-bounds">Trait Bounds</a></h3>
+<ul>
+<li><strong><code>Send + Sync</code></strong> - Hooks must be thread-safe for concurrent execution</li>
+<li><strong><code>async</code></strong> - All hooks are async for consistency and to support async operations (logging to remote services, etc.)</li>
+</ul>
+<h2 id="hook-reference-table"><a class="header" href="#hook-reference-table">Hook Reference Table</a></h2>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Hook</th><th>Phase</th><th>Event Type</th><th>Fires When</th></tr>
+</thead>
+<tbody>
+<tr><td><code>after_added_namespace</code></td><td>Draft</td><td><code>NamespaceInit</code></td><td>A namespace is added to the pipeline</td></tr>
+<tr><td><code>after_added_command</code></td><td>Draft</td><td><code>CommandInit</code></td><td>A command is added to a namespace</td></tr>
+<tr><td><code>before_compile_pipeline</code></td><td>Draft</td><td><code>PipelineInfo</code></td><td>Just before <code>compile()</code> validates the pipeline</td></tr>
+<tr><td><code>after_compile_pipeline</code></td><td>Draft</td><td><code>PipelineCompiled</code></td><td>After successful compilation, pipeline is now Ready</td></tr>
+<tr><td><code>before_execute_pipeline</code></td><td>Ready</td><td><code>PipelineInfo</code></td><td>Just before <code>execute()</code> starts</td></tr>
+<tr><td><code>after_execute_pipeline</code></td><td>Ready</td><td><code>PipelineExecuted</code></td><td>After all namespaces have executed</td></tr>
+<tr><td><code>before_execute_namespace</code></td><td>Ready</td><td><code>NamespaceInfo</code></td><td>Just before a namespace starts executing</td></tr>
+<tr><td><code>after_execute_namespace</code></td><td>Ready</td><td><code>NamespaceExecuted</code></td><td>After a namespace finishes executing</td></tr>
+<tr><td><code>before_execute_command</code></td><td>Ready</td><td><code>CommandInfo</code></td><td>Just before a command executes</td></tr>
+<tr><td><code>after_execute_command</code></td><td>Ready</td><td><code>CommandExecuted</code></td><td>After a command finishes executing</td></tr>
+<tr><td><code>on_results_start</code></td><td>Completed</td><td><code>PipelineInfo</code></td><td>When <code>results()</code> is called</td></tr>
+<tr><td><code>on_results_finish</code></td><td>Completed</td><td><code>PipelineCompleted</code></td><td>After results collection completes</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="pipeline-phases"><a class="header" href="#pipeline-phases">Pipeline Phases</a></h2>
+<p>Hooks are organized by the pipeline state machine phase in which they fire.</p>
+<h3 id="draft-phase"><a class="header" href="#draft-phase">Draft Phase</a></h3>
+<p>The Draft phase covers pipeline construction and compilation.</p>
+<pre><code>Pipeline::new()
+    │
+    ├─► add_namespace() ──► after_added_namespace
+    │       │
+    │       └─► add_command() ──► after_added_command
+    │
+    └─► compile()
+            │
+            ├─► before_compile_pipeline
+            │
+            └─► after_compile_pipeline
+                    │
+                    ▼
+              Pipeline&lt;Ready&gt;
+</code></pre>
+<p><strong><code>after_added_namespace</code></strong> - Fires each time a namespace is registered. Useful for:</p>
+<ul>
+<li>Validating namespace names against a whitelist</li>
+<li>Recording namespace registration for debugging</li>
+<li>Initializing per-namespace state in your hooks</li>
+</ul>
+<p><strong><code>after_added_command</code></strong> - Fires each time a command is added. Useful for:</p>
+<ul>
+<li>Logging command configuration</li>
+<li>Validating command types are allowed</li>
+<li>Building command inventories</li>
+</ul>
+<p><strong><code>before_compile_pipeline</code></strong> - Fires before validation runs. Useful for:</p>
+<ul>
+<li>Pre-compilation logging</li>
+<li>Injecting additional validation</li>
+<li>Recording pipeline structure before any transformation</li>
+</ul>
+<p><strong><code>after_compile_pipeline</code></strong> - Fires after successful compilation. Useful for:</p>
+<ul>
+<li>Logging the compiled pipeline structure</li>
+<li>Sending “pipeline ready” notifications</li>
+<li>Initializing execution-phase state</li>
+</ul>
+<h3 id="ready-phase"><a class="header" href="#ready-phase">Ready Phase</a></h3>
+<p>The Ready phase covers pipeline execution.</p>
+<pre><code>Pipeline&lt;Ready&gt;::execute()
+    │
+    ├─► before_execute_pipeline
+    │
+    ├─► for each namespace:
+    │       │
+    │       ├─► before_execute_namespace
+    │       │
+    │       ├─► for each command:
+    │       │       │
+    │       │       ├─► before_execute_command
+    │       │       │
+    │       │       └─► after_execute_command
+    │       │
+    │       └─► after_execute_namespace
+    │
+    └─► after_execute_pipeline
+            │
+            ▼
+      Pipeline&lt;Completed&gt;
+</code></pre>
+<p><strong><code>before_execute_pipeline</code></strong> - Fires once when execution starts. Useful for:</p>
+<ul>
+<li>Starting execution timers</li>
+<li>Logging “pipeline started”</li>
+<li>Acquiring resources needed during execution</li>
+</ul>
+<p><strong><code>after_execute_pipeline</code></strong> - Fires once when all commands complete. Useful for:</p>
+<ul>
+<li>Stopping execution timers</li>
+<li>Logging “pipeline finished”</li>
+<li>Releasing execution resources</li>
+</ul>
+<p><strong><code>before_execute_namespace</code></strong> / <strong><code>after_execute_namespace</code></strong> - Fire for each namespace. Useful for:</p>
+<ul>
+<li>Per-namespace timing</li>
+<li>Progress reporting (“Processing namespace 2 of 5”)</li>
+<li>Namespace-level metrics</li>
+</ul>
+<p><strong><code>before_execute_command</code></strong> / <strong><code>after_execute_command</code></strong> - Fire for each command. Useful for:</p>
+<ul>
+<li>Per-command timing</li>
+<li>Detailed execution logging</li>
+<li>Command-level metrics</li>
+</ul>
+<h3 id="completed-phase"><a class="header" href="#completed-phase">Completed Phase</a></h3>
+<p>The Completed phase covers results collection.</p>
+<pre><code>Pipeline&lt;Completed&gt;::results()
+    │
+    ├─► on_results_start
+    │
+    └─► on_results_finish
+            │
+            ▼
+        Results returned
+</code></pre>
+<p><strong><code>on_results_start</code></strong> - Fires when results collection begins. Useful for:</p>
+<ul>
+<li>Logging “collecting results”</li>
+<li>Preparing result processors</li>
+</ul>
+<p><strong><code>on_results_finish</code></strong> - Fires when results collection completes. Useful for:</p>
+<ul>
+<li>Final pipeline metrics</li>
+<li>Cleanup operations</li>
+<li>Sending “pipeline complete” notifications</li>
+</ul>
+<h2 id="built-in-implementation-debugeventhooks"><a class="header" href="#built-in-implementation-debugeventhooks">Built-in Implementation: DebugEventHooks</a></h2>
+<p>Panopticon includes <code>DebugEventHooks</code> for development:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>pub struct DebugEventHooks;
+
+#[async_trait]
+impl EventHooks for DebugEventHooks {
+    async fn after_added_namespace(&amp;self, event: &amp;hook_events::NamespaceInit) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - after_added_namespace: {:?}", event);
+        Ok(())
+    }
+
+    async fn after_added_command(&amp;self, event: &amp;hook_events::CommandInit) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - after_added_command: {:?}", event);
+        Ok(())
+    }
+
+    async fn before_compile_pipeline(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - before_compile_pipeline: {:?}", event);
+        Ok(())
+    }
+
+    async fn after_compile_pipeline(&amp;self, event: &amp;hook_events::PipelineCompiled) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - after_compile_pipeline: {:?}", event);
+        Ok(())
+    }
+
+    async fn before_execute_pipeline(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - before_execute_pipeline: {:?}", event);
+        Ok(())
+    }
+
+    async fn after_execute_pipeline(&amp;self, event: &amp;hook_events::PipelineExecuted) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - after_execute_pipeline: {:?}", event);
+        Ok(())
+    }
+
+    async fn before_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceInfo) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - before_execute_namespace: {:?}", event);
+        Ok(())
+    }
+
+    async fn after_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceExecuted) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - after_execute_namespace: {:?}", event);
+        Ok(())
+    }
+
+    async fn before_execute_command(&amp;self, event: &amp;hook_events::CommandInfo) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - before_execute_command: {:?}", event);
+        Ok(())
+    }
+
+    async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - after_execute_command: {:?}", event);
+        Ok(())
+    }
+
+    async fn on_results_start(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - on_results_start: {:?}", event);
+        Ok(())
+    }
+
+    async fn on_results_finish(&amp;self, event: &amp;hook_events::PipelineCompleted) -&gt; Result&lt;()&gt; {
+        println!("DebugEventHooks - on_results_finish: {:?}", event);
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<p>This is included automatically in debug builds via <code>PipelineServices::defaults()</code>.</p>
+<h2 id="example-metrics-hooks"><a class="header" href="#example-metrics-hooks">Example: Metrics Hooks</a></h2>
+<p>Collect execution timing metrics:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use panopticon_core::prelude::*;
+use async_trait::async_trait;
+use std::sync::Mutex;
+use std::time::Instant;
+use std::collections::HashMap;
+
+pub struct MetricsHooks {
+    pipeline_start: Mutex&lt;Option&lt;Instant&gt;&gt;,
+    namespace_starts: Mutex&lt;HashMap&lt;usize, Instant&gt;&gt;,
+    command_starts: Mutex&lt;HashMap&lt;String, Instant&gt;&gt;,
+    metrics: Mutex&lt;Metrics&gt;,
+}
+
+#[derive(Default)]
+pub struct Metrics {
+    pub pipeline_duration_ms: u64,
+    pub namespace_durations_ms: HashMap&lt;String, u64&gt;,
+    pub command_durations_ms: HashMap&lt;String, u64&gt;,
+    pub total_commands: usize,
+}
+
+impl MetricsHooks {
+    pub fn new() -&gt; Self {
+        Self {
+            pipeline_start: Mutex::new(None),
+            namespace_starts: Mutex::new(HashMap::new()),
+            command_starts: Mutex::new(HashMap::new()),
+            metrics: Mutex::new(Metrics::default()),
+        }
+    }
+
+    pub fn get_metrics(&amp;self) -&gt; Metrics {
+        self.metrics.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl EventHooks for MetricsHooks {
+    async fn before_execute_pipeline(&amp;self, _event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        *self.pipeline_start.lock().unwrap() = Some(Instant::now());
+        Ok(())
+    }
+
+    async fn after_execute_pipeline(&amp;self, _event: &amp;hook_events::PipelineExecuted) -&gt; Result&lt;()&gt; {
+        if let Some(start) = *self.pipeline_start.lock().unwrap() {
+            self.metrics.lock().unwrap().pipeline_duration_ms =
+                start.elapsed().as_millis() as u64;
+        }
+        Ok(())
+    }
+
+    async fn before_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceInfo) -&gt; Result&lt;()&gt; {
+        self.namespace_starts
+            .lock()
+            .unwrap()
+            .insert(event.namespace_index, Instant::now());
+        Ok(())
+    }
+
+    async fn after_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceExecuted) -&gt; Result&lt;()&gt; {
+        if let Some(start) = self.namespace_starts.lock().unwrap().get(&amp;event.namespace_index) {
+            self.metrics
+                .lock()
+                .unwrap()
+                .namespace_durations_ms
+                .insert(event.namespace_name.clone(), start.elapsed().as_millis() as u64);
+        }
+        Ok(())
+    }
+
+    async fn before_execute_command(&amp;self, event: &amp;hook_events::CommandInfo) -&gt; Result&lt;()&gt; {
+        self.command_starts
+            .lock()
+            .unwrap()
+            .insert(event.command_name.clone(), Instant::now());
+        Ok(())
+    }
+
+    async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; {
+        let mut metrics = self.metrics.lock().unwrap();
+        metrics.total_commands += 1;
+
+        if let Some(start) = self.command_starts.lock().unwrap().get(&amp;event.command_name) {
+            metrics
+                .command_durations_ms
+                .insert(event.command_name.clone(), start.elapsed().as_millis() as u64);
+        }
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="example-progress-hooks"><a class="header" href="#example-progress-hooks">Example: Progress Hooks</a></h2>
+<p>Report execution progress to a UI:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use panopticon_core::prelude::*;
+use async_trait::async_trait;
+use tokio::sync::mpsc;
+
+#[derive(Debug, Clone)]
+pub enum ProgressEvent {
+    PipelineStarted { total_namespaces: usize, total_commands: usize },
+    NamespaceStarted { name: String, index: usize, command_count: usize },
+    NamespaceFinished { name: String, index: usize },
+    CommandStarted { name: String, command_type: String },
+    CommandFinished { name: String },
+    PipelineFinished,
+}
+
+pub struct ProgressHooks {
+    sender: mpsc::Sender&lt;ProgressEvent&gt;,
+}
+
+impl ProgressHooks {
+    pub fn new(sender: mpsc::Sender&lt;ProgressEvent&gt;) -&gt; Self {
+        Self { sender }
+    }
+}
+
+#[async_trait]
+impl EventHooks for ProgressHooks {
+    async fn before_execute_pipeline(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        let _ = self.sender.send(ProgressEvent::PipelineStarted {
+            total_namespaces: event.namespace_count,
+            total_commands: event.command_count,
+        }).await;
+        Ok(())
+    }
+
+    async fn after_execute_pipeline(&amp;self, _event: &amp;hook_events::PipelineExecuted) -&gt; Result&lt;()&gt; {
+        let _ = self.sender.send(ProgressEvent::PipelineFinished).await;
+        Ok(())
+    }
+
+    async fn before_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceInfo) -&gt; Result&lt;()&gt; {
+        let _ = self.sender.send(ProgressEvent::NamespaceStarted {
+            name: event.namespace_name.clone(),
+            index: event.namespace_index,
+            command_count: event.command_count,
+        }).await;
+        Ok(())
+    }
+
+    async fn after_execute_namespace(&amp;self, event: &amp;hook_events::NamespaceExecuted) -&gt; Result&lt;()&gt; {
+        let _ = self.sender.send(ProgressEvent::NamespaceFinished {
+            name: event.namespace_name.clone(),
+            index: event.namespace_index,
+        }).await;
+        Ok(())
+    }
+
+    async fn before_execute_command(&amp;self, event: &amp;hook_events::CommandInfo) -&gt; Result&lt;()&gt; {
+        let _ = self.sender.send(ProgressEvent::CommandStarted {
+            name: event.command_name.clone(),
+            command_type: event.command_type.clone(),
+        }).await;
+        Ok(())
+    }
+
+    async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; {
+        let _ = self.sender.send(ProgressEvent::CommandFinished {
+            name: event.command_name.clone(),
+        }).await;
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="example-audit-hooks"><a class="header" href="#example-audit-hooks">Example: Audit Hooks</a></h2>
+<p>Record execution history for compliance:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use panopticon_core::prelude::*;
+use async_trait::async_trait;
+use chrono::{DateTime, Utc};
+use serde::Serialize;
+
+#[derive(Serialize)]
+pub struct AuditRecord {
+    timestamp: DateTime&lt;Utc&gt;,
+    event_type: String,
+    details: serde_json::Value,
+}
+
+pub struct AuditHooks {
+    records: std::sync::Mutex&lt;Vec&lt;AuditRecord&gt;&gt;,
+}
+
+impl AuditHooks {
+    pub fn new() -&gt; Self {
+        Self {
+            records: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+
+    fn record(&amp;self, event_type: &amp;str, details: serde_json::Value) {
+        self.records.lock().unwrap().push(AuditRecord {
+            timestamp: Utc::now(),
+            event_type: event_type.to_string(),
+            details,
+        });
+    }
+
+    pub fn export(&amp;self) -&gt; Vec&lt;AuditRecord&gt; {
+        self.records.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl EventHooks for AuditHooks {
+    async fn before_execute_pipeline(&amp;self, event: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        self.record("pipeline_started", serde_json::json!({
+            "namespace_count": event.namespace_count,
+            "command_count": event.command_count,
+        }));
+        Ok(())
+    }
+
+    async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; {
+        self.record("command_executed", serde_json::json!({
+            "command_name": event.command_name,
+            "command_type": event.command_type,
+            "namespace_index": event.namespace_index,
+        }));
+        Ok(())
+    }
+
+    async fn on_results_finish(&amp;self, event: &amp;hook_events::PipelineCompleted) -&gt; Result&lt;()&gt; {
+        self.record("pipeline_completed", serde_json::json!({
+            "namespace_count": event.namespace_count,
+            "command_count": event.command_count,
+        }));
+        Ok(())
+    }
+}
+<span class="boring">}</span></code></pre>
+<h2 id="error-handling"><a class="header" href="#error-handling">Error Handling</a></h2>
+<p>Hook errors are aggregated, not short-circuited. All registered hooks run even if one fails:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// If you have two hooks registered and both fail:
+// Hook 1 returns: Err(anyhow!("Database connection failed"))
+// Hook 2 returns: Err(anyhow!("Network timeout"))
+//
+// The combined error is:
+// Err(anyhow!("Hook service errors: Database connection failed; Network timeout"))
+<span class="boring">}</span></code></pre>
+<p>This ensures that one misbehaving hook does not prevent other hooks from executing. However, if any hook fails, the combined error propagates to the caller.</p>
+<h3 id="recommended-error-handling-patterns"><a class="header" href="#recommended-error-handling-patterns">Recommended Error Handling Patterns</a></h3>
+<p><strong>Non-critical hooks (logging, metrics):</strong> Handle errors internally:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; {
+    if let Err(e) = self.try_log_metrics(event).await {
+        eprintln!("Warning: metrics logging failed: {}", e);
+    }
+    Ok(()) // Don't propagate - metrics failure shouldn't stop execution
+}
+<span class="boring">}</span></code></pre>
+<p><strong>Critical hooks (audit, compliance):</strong> Propagate errors:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>async fn after_execute_command(&amp;self, event: &amp;hook_events::CommandExecuted) -&gt; Result&lt;()&gt; {
+    self.write_audit_log(event)
+        .await
+        .context("Audit logging is required - cannot continue without it")?;
+    Ok(())
+}
+<span class="boring">}</span></code></pre>
+<h2 id="registering-hooks"><a class="header" href="#registering-hooks">Registering Hooks</a></h2>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use panopticon_core::prelude::*;
+
+let mut services = PipelineServices::new();
+
+// Register multiple hooks - they all receive events
+services.add_hook(MetricsHooks::new());
+services.add_hook(AuditHooks::new());
+services.add_hook(ProgressHooks::new(progress_sender));
+
+let pipeline = Pipeline::with_services(services);
+<span class="boring">}</span></code></pre>
+<h2 id="testing-hooks"><a class="header" href="#testing-hooks">Testing Hooks</a></h2>
+<p>Create a mock hook that records all events:</p>
+<pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>use std::sync::{Arc, Mutex};
+
+#[derive(Default, Clone)]
+pub struct MockHooks {
+    events: Arc&lt;Mutex&lt;Vec&lt;String&gt;&gt;&gt;,
+}
+
+impl MockHooks {
+    pub fn events(&amp;self) -&gt; Vec&lt;String&gt; {
+        self.events.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl EventHooks for MockHooks {
+    async fn before_execute_pipeline(&amp;self, _: &amp;hook_events::PipelineInfo) -&gt; Result&lt;()&gt; {
+        self.events.lock().unwrap().push("before_execute_pipeline".into());
+        Ok(())
+    }
+
+    async fn after_execute_pipeline(&amp;self, _: &amp;hook_events::PipelineExecuted) -&gt; Result&lt;()&gt; {
+        self.events.lock().unwrap().push("after_execute_pipeline".into());
+        Ok(())
+    }
+
+    // ... implement other hooks similarly
+}
+
+#[tokio::test]
+async fn test_hook_order() {
+    let hooks = MockHooks::default();
+    let mut services = PipelineServices::new();
+    services.add_hook(hooks.clone());
+
+    let mut pipeline = Pipeline::with_services(services);
+    // ... add namespaces and commands
+    let pipeline = pipeline.compile().unwrap();
+    let pipeline = pipeline.execute().await.unwrap();
+
+    let events = hooks.events();
+    assert!(events.contains(&amp;"before_execute_pipeline".to_string()));
+    assert!(events.contains(&amp;"after_execute_pipeline".to_string()));
+
+    // Verify order
+    let before_idx = events.iter().position(|e| e == "before_execute_pipeline").unwrap();
+    let after_idx = events.iter().position(|e| e == "after_execute_pipeline").unwrap();
+    assert!(before_idx &lt; after_idx);
+}
+<span class="boring">}</span></code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../services/pipeline-io.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../services/hook-events.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../services/pipeline-io.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../services/hook-events.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

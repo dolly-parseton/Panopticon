@@ -1,0 +1,14 @@
+[book]
+title = "Extending Panopticon"
+authors = ["Panopticon Contributors"]
+description = "A deep-dive into extending Panopticon with custom commands and services"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+default-theme = "rust"
+git-repository-url = "https://github.com/your-org/panopticon"
+edit-url-template = "https://github.com/your-org/panopticon/edit/main/docs/extending/{path}"
