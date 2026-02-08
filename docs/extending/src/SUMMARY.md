@@ -41,3 +41,6 @@
     - [Derived Results](./advanced-patterns/derived-results.md)
     - [Error Handling](./advanced-patterns/error-handling.md)
 
+---
+
+<a href="/">← Panopticon Guide</a>

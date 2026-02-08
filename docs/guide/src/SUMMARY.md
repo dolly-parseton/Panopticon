@@ -42,3 +42,6 @@
 
 - [Services & IO](./services-and-io/index.md)
 
+---
+
+<a href="/extending/">Extending Panopticon →</a>
