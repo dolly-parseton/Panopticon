@@ -39,6 +39,7 @@
 - [Advanced Patterns](./advanced-patterns/index.md)
     - [Type-Indexed Extensions](./advanced-patterns/type-indexed-extensions.md)
     - [Derived Results](./advanced-patterns/derived-results.md)
+    - [Composite Commands](./advanced-patterns/composite-commands.md)
     - [Error Handling](./advanced-patterns/error-handling.md)
 
 ---

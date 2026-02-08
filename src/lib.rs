@@ -50,6 +50,9 @@ pub mod extend {
         result::{ResultKind, ResultSpec},
     };
 
+    // Macros
+    pub use crate::attrs;
+
     // Extensions
     // pub use crate::extensions::Extensions; < Don't think I need to export this, access using ExecutionContext::extensions() then use the methods?
 

@@ -4,8 +4,25 @@ use crate::imports::*;
     Types:
     * Attributes - A map of attribute names to ScalarValue
     * AttributeSpec - Struct representing the specification of an attribute
+
+    Macros:
+    * attrs! - Creates an Attributes HashMap from key-value pairs
 */
 pub type Attributes = std::collections::HashMap<String, ScalarValue>;
+
+#[macro_export]
+macro_rules! attrs {
+    () => {
+        std::collections::HashMap::<String, $crate::prelude::ScalarValue>::new()
+    };
+    ($($key:expr => $value:expr),+ $(,)?) => {{
+        let mut map = std::collections::HashMap::<String, $crate::prelude::ScalarValue>::new();
+        $(
+            map.insert($key.into(), $value.into());
+        )+
+        map
+    }};
+}
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub struct AttributeSpec<T: Into<String>> {

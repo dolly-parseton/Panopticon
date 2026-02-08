@@ -10,6 +10,7 @@ The patterns in this section solve specific problems:
 |---------|----------|
 | [Type-Indexed Extensions](./type-indexed-extensions.md) | Commands need shared state: HTTP clients, database pools, auth tokens |
 | [Derived Results](./derived-results.md) | Result names come from user input, not hardcoded strings |
+| [Composite Commands](./composite-commands.md) | A command orchestrates multiple lower-level commands via a nested pipeline |
 | [Error Handling](./error-handling.md) | Building production-quality commands with proper error context |
 
 ## Prerequisites
@@ -35,11 +36,14 @@ Medium Complexity (dynamic iteration, basic error handling):
 
 Complex Command (shared HTTP client, auth tokens, robust errors):
   └── Use Extensions for state, LiteralFieldRef for safety, full anyhow patterns.
+
+Orchestrating Command (wraps multiple commands in a workflow):
+  └── Use composite commands with nested pipelines, marshal results between contexts.
 ```
 
 ## The Extension Ecosystem
 
-These patterns work together. A real-world API integration command might use all three:
+These patterns work together. A real-world API integration command might use several:
 
 ```rust
 // Type-indexed extension: shared HTTP client
@@ -51,6 +55,10 @@ let client = context.extensions()
 
 // Derived results: endpoint names from user config
 .derived_result("endpoints", name_ref, None, ResultKind::Data)  // Safe via LiteralFieldRef
+
+// Composite command: orchestrate multiple API calls
+let mut pipeline = Pipeline::with_services(context.services().clone());
+// ... add low-level API commands, execute, marshal results
 ```
 
 ## What's Next
@@ -61,6 +69,8 @@ Start with whichever pattern matches your immediate need:
 
 2. **[Derived Results](./derived-results.md)** - If your command produces results whose names aren't known until the user provides configuration.
 
-3. **[Error Handling](./error-handling.md)** - If you want to understand the error patterns used throughout Panopticon's built-in commands.
+3. **[Composite Commands](./composite-commands.md)** - If you want to wrap a complex API where high-level commands orchestrate multiple lower-level commands via a nested pipeline.
+
+4. **[Error Handling](./error-handling.md)** - If you want to understand the error patterns used throughout Panopticon's built-in commands.
 
 Each section includes real-world examples, anti-patterns to avoid, and guidance on when the pattern is (and isn't) appropriate.
