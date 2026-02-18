@@ -20,6 +20,7 @@ pub struct Pipeline<T = Draft> {
     pub(crate) services: PipelineServices,
     pub(crate) namespaces: Vec<Namespace>,
     pub(crate) commands: Vec<CommandSpec>,
+    pub(crate) pre_initialised_extensions: HashSet<ExtensionKey>,
     state: T,
 }
 
@@ -29,6 +30,7 @@ impl Default for Pipeline<Draft> {
             services: PipelineServices::default(),
             namespaces: Vec::new(),
             commands: Vec::new(),
+            pre_initialised_extensions: HashSet::new(),
             state: Draft,
         }
     }
@@ -40,8 +42,13 @@ impl Pipeline<Draft> {
             services,
             namespaces: Vec::new(),
             commands: Vec::new(),
+            pre_initialised_extensions: HashSet::new(),
             state: Draft,
         }
+    }
+
+    pub fn add_pre_initialised_extensions(&mut self, keys: impl IntoIterator<Item = ExtensionKey>) {
+        self.pre_initialised_extensions.extend(keys);
     }
 }
 

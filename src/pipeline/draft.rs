@@ -8,6 +8,7 @@ impl Pipeline<Draft> {
             services: PipelineServices::default(),
             namespaces: Vec::new(),
             commands: Vec::new(),
+            pre_initialised_extensions: HashSet::new(),
             state: Draft,
         }
     }
@@ -259,9 +260,12 @@ impl Pipeline<Draft> {
             for command in &self.commands {
                 let ns_name = self.namespaces[command.namespace_index].name();
                 for ext_key in &command.requires_extensions {
-                    if !extension_providers.contains_key(ext_key) {
+                    if !extension_providers.contains_key(ext_key)
+                        && !self.pre_initialised_extensions.contains(ext_key)
+                    {
                         return Err(anyhow::anyhow!(
-                            "Command '{}.{}' requires extension '{}', but no command provides it",
+                            "Command '{}.{}' requires extension '{}', but no command provides it \
+                             and it is not pre-initialised",
                             ns_name,
                             command.name,
                             ext_key
@@ -272,7 +276,11 @@ impl Pipeline<Draft> {
         }
 
         // Execution plan validation
-        if let Err(e) = ExecutionPlan::new(&self.namespaces, &self.commands) {
+        if let Err(e) = ExecutionPlan::new(
+            &self.namespaces,
+            &self.commands,
+            &self.pre_initialised_extensions,
+        ) {
             tracing::warn!("Execution plan validation failed during compilation: {}", e);
             return Err(anyhow::anyhow!(
                 "Execution plan validation failed during compilation: {}",
@@ -299,6 +307,7 @@ impl Pipeline<Draft> {
             services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
+            pre_initialised_extensions: self.pre_initialised_extensions,
             state: Ready,
         })
     }

@@ -203,6 +203,7 @@ impl Pipeline<Completed> {
             services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
+            pre_initialised_extensions: self.pre_initialised_extensions,
             state: Ready,
         }
     }
@@ -212,6 +213,7 @@ impl Pipeline<Completed> {
             services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
+            pre_initialised_extensions: self.pre_initialised_extensions,
             state: Draft,
         }
     }

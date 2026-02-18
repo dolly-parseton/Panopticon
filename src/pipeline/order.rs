@@ -11,16 +11,23 @@ pub struct ExecutionPlan<'a> {
     namespaces: &'a [Namespace],
     commands: &'a [CommandSpec],
     namespace_order: Vec<usize>,
+    pre_initialised_extensions: &'a HashSet<ExtensionKey>,
     current: usize,
 }
 
 impl<'a> ExecutionPlan<'a> {
-    pub fn new(namespaces: &'a [Namespace], commands: &'a [CommandSpec]) -> Result<Self> {
-        let namespace_order = compute_namespace_order(namespaces, commands)?;
+    pub fn new(
+        namespaces: &'a [Namespace],
+        commands: &'a [CommandSpec],
+        pre_initialised_extensions: &'a HashSet<ExtensionKey>,
+    ) -> Result<Self> {
+        let namespace_order =
+            compute_namespace_order(namespaces, commands, pre_initialised_extensions)?;
         Ok(ExecutionPlan {
             namespaces,
             commands,
             namespace_order,
+            pre_initialised_extensions,
             current: 0,
         })
     }
@@ -39,7 +46,11 @@ impl<'a> ExecutionPlan<'a> {
             return Ok(vec![]);
         }
 
-        let order = compute_command_order(&ns_commands, namespace.name())?;
+        let order = compute_command_order(
+            &ns_commands,
+            namespace.name(),
+            self.pre_initialised_extensions,
+        )?;
 
         Ok(order.into_iter().map(|i| ns_commands[i]).collect())
     }
@@ -79,6 +90,7 @@ impl<'a> Iterator for ExecutionPlan<'a> {
 fn compute_namespace_order(
     namespaces: &[Namespace],
     commands: &[CommandSpec],
+    pre_initialised_extensions: &HashSet<ExtensionKey>,
 ) -> Result<Vec<usize>> {
     if namespaces.is_empty() {
         return Ok(vec![]);
@@ -143,6 +155,10 @@ fn compute_namespace_order(
     for command in commands {
         let requiring_ns_idx = command.namespace_index;
         for ext_key in &command.requires_extensions {
+            // Skip extensions that are pre-initialised ahead of execution
+            if pre_initialised_extensions.contains(ext_key) {
+                continue;
+            }
             if let Some(&provider_ns_idx) = extension_providers.get(ext_key) {
                 if provider_ns_idx != requiring_ns_idx {
                     graph
@@ -167,7 +183,11 @@ fn compute_namespace_order(
         .map_err(|_| anyhow::anyhow!("Circular dependency detected in namespace execution order"))
 }
 
-fn compute_command_order(commands: &[&CommandSpec], namespace: &str) -> Result<Vec<usize>> {
+fn compute_command_order(
+    commands: &[&CommandSpec],
+    namespace: &str,
+    pre_initialised_extensions: &HashSet<ExtensionKey>,
+) -> Result<Vec<usize>> {
     if commands.is_empty() {
         return Ok(vec![]);
     }
@@ -202,6 +222,10 @@ fn compute_command_order(commands: &[&CommandSpec], namespace: &str) -> Result<V
 
     for (idx, command) in commands.iter().enumerate() {
         for ext_key in &command.requires_extensions {
+            // Skip extensions that are pre-initialised ahead of execution
+            if pre_initialised_extensions.contains(ext_key) {
+                continue;
+            }
             if let Some(&provider_idx) = ext_provider_idx.get(ext_key) {
                 if provider_idx != idx {
                     graph.get_mut(&idx).unwrap().insert(provider_idx);

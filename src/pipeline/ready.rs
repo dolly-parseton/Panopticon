@@ -32,7 +32,11 @@ impl Pipeline<Ready> {
             "Inserted static values into ExecutionContext scalar store"
         );
 
-        let plan = ExecutionPlan::new(&self.namespaces, &self.commands)?;
+        let plan = ExecutionPlan::new(
+            &self.namespaces,
+            &self.commands,
+            &self.pre_initialised_extensions,
+        )?;
 
         for group_result in plan {
             let ExecutionGroup {
@@ -134,6 +138,7 @@ impl Pipeline<Ready> {
             services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
+            pre_initialised_extensions: self.pre_initialised_extensions,
             state: Completed { context },
         })
     }
@@ -183,6 +188,7 @@ impl Pipeline<Ready> {
             services: self.services,
             namespaces: self.namespaces,
             commands: self.commands,
+            pre_initialised_extensions: self.pre_initialised_extensions,
             state: Draft,
         }
     }
