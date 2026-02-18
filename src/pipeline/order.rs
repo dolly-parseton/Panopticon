@@ -1,4 +1,5 @@
 use crate::imports::*;
+use std::cmp::Reverse;
 
 pub struct ExecutionGroup<'a> {
     pub(crate) namespace: &'a Namespace,
@@ -129,7 +130,40 @@ fn compute_namespace_order(
         }
     }
 
-    topological_sort(&graph, namespaces.len())
+    // Add dependencies from extension provides/requires relationships
+    let mut extension_providers: HashMap<ExtensionKey, usize> = HashMap::new();
+    for command in commands {
+        for ext_key in &command.provides_extensions {
+            extension_providers
+                .entry(ext_key.clone())
+                .or_insert(command.namespace_index);
+        }
+    }
+
+    for command in commands {
+        let requiring_ns_idx = command.namespace_index;
+        for ext_key in &command.requires_extensions {
+            if let Some(&provider_ns_idx) = extension_providers.get(ext_key) {
+                if provider_ns_idx != requiring_ns_idx {
+                    graph
+                        .get_mut(&requiring_ns_idx)
+                        .unwrap()
+                        .insert(provider_ns_idx);
+                }
+            }
+        }
+    }
+
+    // Compute priority: namespaces with extension providers sort first among peers
+    let mut priority: HashMap<usize, u32> = HashMap::new();
+    for command in commands {
+        if !command.provides_extensions.is_empty() {
+            let entry = priority.entry(command.namespace_index).or_insert(0);
+            *entry = (*entry).max(1);
+        }
+    }
+
+    topological_sort_with_priority(&graph, namespaces.len(), &priority)
         .map_err(|_| anyhow::anyhow!("Circular dependency detected in namespace execution order"))
 }
 
@@ -158,13 +192,32 @@ fn compute_command_order(commands: &[&CommandSpec], namespace: &str) -> Result<V
         graph.insert(idx, cmd_deps);
     }
 
+    // Add extension-based edges within the namespace
+    let mut ext_provider_idx: HashMap<&ExtensionKey, usize> = HashMap::new();
+    for (idx, command) in commands.iter().enumerate() {
+        for ext_key in &command.provides_extensions {
+            ext_provider_idx.insert(ext_key, idx);
+        }
+    }
+
+    for (idx, command) in commands.iter().enumerate() {
+        for ext_key in &command.requires_extensions {
+            if let Some(&provider_idx) = ext_provider_idx.get(ext_key) {
+                if provider_idx != idx {
+                    graph.get_mut(&idx).unwrap().insert(provider_idx);
+                }
+            }
+        }
+    }
+
     topological_sort(&graph, commands.len())
         .map_err(|_| anyhow::anyhow!("Circular dependency detected in command execution order"))
 }
 
-fn topological_sort(
+fn topological_sort_with_priority(
     graph: &HashMap<usize, HashSet<usize>>,
     node_count: usize,
+    priority: &HashMap<usize, u32>,
 ) -> Result<Vec<usize>> {
     let mut in_degree: HashMap<usize, usize> = (0..node_count).map(|i| (i, 0)).collect();
 
@@ -172,15 +225,15 @@ fn topological_sort(
         *in_degree.get_mut(node).unwrap() = deps.len();
     }
 
-    let mut queue: VecDeque<usize> = in_degree
+    let mut heap: BinaryHeap<(u32, Reverse<usize>)> = in_degree
         .iter()
         .filter(|&(_, &degree)| degree == 0)
-        .map(|(&node, _)| node)
+        .map(|(&node, _)| (*priority.get(&node).unwrap_or(&0), Reverse(node)))
         .collect();
 
     let mut result = Vec::new();
 
-    while let Some(node) = queue.pop_front() {
+    while let Some((_, Reverse(node))) = heap.pop() {
         result.push(node);
 
         for (dependent, deps) in graph.iter() {
@@ -189,7 +242,7 @@ fn topological_sort(
                 *degree -= 1;
 
                 if *degree == 0 {
-                    queue.push_back(*dependent);
+                    heap.push((*priority.get(dependent).unwrap_or(&0), Reverse(*dependent)));
                 }
             }
         }
@@ -200,4 +253,11 @@ fn topological_sort(
     }
 
     Ok(result)
+}
+
+fn topological_sort(
+    graph: &HashMap<usize, HashSet<usize>>,
+    node_count: usize,
+) -> Result<Vec<usize>> {
+    topological_sort_with_priority(graph, node_count, &HashMap::new())
 }

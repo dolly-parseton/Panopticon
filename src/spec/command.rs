@@ -13,6 +13,8 @@ pub struct CommandSpec {
     pub exepected_attributes: Vec<AttributeSpec<String>>,
     pub expected_results: Vec<ResultSpec<String>>,
     pub dependencies: HashSet<StorePath>,
+    pub provides_extensions: Vec<ExtensionKey>,
+    pub requires_extensions: Vec<ExtensionKey>,
 }
 
 impl CommandSpec {
@@ -37,6 +39,8 @@ impl CommandSpec {
                 .map(|res| ResultSpec::<String>::from(res.clone()))
                 .collect(),
             dependencies,
+            provides_extensions: T::provides_extensions().to_vec(),
+            requires_extensions: T::requires_extensions().to_vec(),
         })
     }
 
@@ -44,36 +48,4 @@ impl CommandSpec {
         use crate::pipeline::validation::validate_attributes;
         validate_attributes(&self.attributes, &self.exepected_attributes)
     }
-
-    // NOT SURE IF THIS SHOULD BE PUBLIC OR NOT - Todo consider later
-    // pub fn index(&self) -> usize {
-    //     self.namespace_index
-    // }
-    // pub fn set_index(&mut self, index: usize) {
-    //     self.namespace_index = index;
-    // }
-
-    // pub fn name(&self) -> &str {
-    //     &self.name
-    // }
-    // pub fn set_name<T: Into<String>>(&mut self, name: T) {
-    //     self.name = name.into();
-    // }
-
-    // pub fn attributes(&self) -> &Attributes {
-    //     &self.attributes
-    // }
-    // pub fn expected_attributes(&self) -> &Vec<AttributeSpec<String>> {
-    //     &self.exepected_attributes
-    // }
-    // pub fn expected_results(&self) -> &Vec<ResultSpec<String>> {
-    //     &self.expected_results
-    // }
-
-    // pub fn dependencies(&self) -> &std::collections::HashSet<StorePath> {
-    //     &self.dependencies
-    // }
-    // pub fn is_dependent_on(&self, path: &StorePath) -> bool {
-    //     self.dependencies.contains(path)
-    // }
 }

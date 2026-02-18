@@ -164,6 +164,13 @@ pub trait Descriptor: Sized {
     fn command_type() -> &'static str;
     fn command_attributes() -> &'static [AttributeSpec<&'static str>];
     fn command_results() -> &'static [ResultSpec<&'static str>];
+    // Defaults - Extensions
+    fn provides_extensions() -> &'static [ExtensionKey] {
+        &[]
+    }
+    fn requires_extensions() -> &'static [ExtensionKey] {
+        &[]
+    }
     // Defaults - Attributes
     fn available_attributes() -> Vec<&'static AttributeSpec<&'static str>> {
         let mut attrs = Vec::new();

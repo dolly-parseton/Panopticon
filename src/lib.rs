@@ -54,7 +54,7 @@ pub mod extend {
     pub use crate::attrs;
 
     // Extensions
-    // pub use crate::extensions::Extensions; < Don't think I need to export this, access using ExecutionContext::extensions() then use the methods?
+    pub use crate::extensions::ExtensionKey;
 
     // Value types - used in trait signatures and command implementations
     pub use crate::values::context::ExecutionContext;
@@ -106,7 +106,7 @@ pub(crate) mod imports {
     pub use anyhow::Context as _;
 
     // Std library
-    pub use std::collections::{HashMap, HashSet, VecDeque};
+    pub use std::collections::{BinaryHeap, HashMap, HashSet};
     pub use std::path::PathBuf;
     pub use std::sync::Arc;
     pub use std::time::Instant;

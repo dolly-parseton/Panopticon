@@ -17,7 +17,41 @@ use crate::imports::*;
 use std::any::{Any, TypeId};
 use tokio::sync::{RwLockReadGuard, RwLockWriteGuard};
 
-/// Read-only guard for accessing extensions
+#[derive(Clone, Eq, PartialEq, Hash)]
+pub struct ExtensionKey {
+    type_id: TypeId,
+    type_name: &'static str,
+}
+
+impl ExtensionKey {
+    pub fn of<T: 'static>() -> Self {
+        ExtensionKey {
+            type_id: TypeId::of::<T>(),
+            type_name: std::any::type_name::<T>(),
+        }
+    }
+
+    pub fn type_id(&self) -> TypeId {
+        self.type_id
+    }
+
+    pub fn type_name(&self) -> &'static str {
+        self.type_name
+    }
+}
+
+impl std::fmt::Debug for ExtensionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ExtensionKey({})", self.type_name)
+    }
+}
+
+impl std::fmt::Display for ExtensionKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.type_name)
+    }
+}
+
 pub struct ExtensionsReadGuard<'a> {
     guard: RwLockReadGuard<'a, HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
 }
@@ -32,7 +66,6 @@ impl<'a> ExtensionsReadGuard<'a> {
     }
 }
 
-/// Read-write guard for modifying extensions
 pub struct ExtensionsWriteGuard<'a> {
     guard: RwLockWriteGuard<'a, HashMap<TypeId, Box<dyn Any + Send + Sync>>>,
 }
@@ -65,7 +98,7 @@ impl<'a> ExtensionsWriteGuard<'a> {
 #[derive(Clone)]
 pub struct Extensions {
     map: Arc<RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync>>>>,
-    keys: Vec<TypeId>, // For Debug purposes, since we can't use the async method to read it during Debug impl
+    keys: Vec<ExtensionKey>, // For Debug purposes, since we can't use the async method to read it during Debug impl
 }
 
 impl std::fmt::Debug for Extensions {
@@ -85,7 +118,7 @@ impl Default for Extensions {
         );
         Extensions {
             map: Arc::new(RwLock::new(map)),
-            keys: vec![TypeId::of::<tokio_util::sync::CancellationToken>()],
+            keys: vec![ExtensionKey::of::<tokio_util::sync::CancellationToken>()],
         }
     }
 }
@@ -95,21 +128,17 @@ impl Extensions {
         Self::default()
     }
 
-    /// Acquire a read lock on the extensions map
     pub async fn read(&self) -> ExtensionsReadGuard<'_> {
         ExtensionsReadGuard {
             guard: self.map.read().await,
         }
     }
 
-    /// Acquire a write lock on the extensions map
     pub async fn write(&self) -> ExtensionsWriteGuard<'_> {
         ExtensionsWriteGuard {
             guard: self.map.write().await,
         }
     }
-
-    // Convenience methods for CancellationToken
 
     pub async fn is_canceled(&self) -> bool {
         self.read()

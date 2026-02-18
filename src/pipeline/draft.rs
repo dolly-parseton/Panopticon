@@ -228,6 +228,49 @@ impl Pipeline<Draft> {
             command.validate_attributes()?;
         }
 
+        // Extension validation: single provider per extension + all required extensions have a provider
+        {
+            let mut extension_providers: HashMap<ExtensionKey, Vec<(&str, &str)>> = HashMap::new();
+            for command in &self.commands {
+                let ns_name = self.namespaces[command.namespace_index].name();
+                for ext_key in &command.provides_extensions {
+                    extension_providers
+                        .entry(ext_key.clone())
+                        .or_default()
+                        .push((ns_name, &command.name));
+                }
+            }
+
+            for (ext_key, providers) in &extension_providers {
+                if providers.len() > 1 {
+                    let provider_list: Vec<String> = providers
+                        .iter()
+                        .map(|(ns, cmd)| format!("{}.{}", ns, cmd))
+                        .collect();
+                    return Err(anyhow::anyhow!(
+                        "Extension '{}' is provided by multiple commands: {}. \
+                         Each extension must have exactly one provider.",
+                        ext_key,
+                        provider_list.join(", ")
+                    ));
+                }
+            }
+
+            for command in &self.commands {
+                let ns_name = self.namespaces[command.namespace_index].name();
+                for ext_key in &command.requires_extensions {
+                    if !extension_providers.contains_key(ext_key) {
+                        return Err(anyhow::anyhow!(
+                            "Command '{}.{}' requires extension '{}', but no command provides it",
+                            ns_name,
+                            command.name,
+                            ext_key
+                        ));
+                    }
+                }
+            }
+        }
+
         // Execution plan validation
         if let Err(e) = ExecutionPlan::new(&self.namespaces, &self.commands) {
             tracing::warn!("Execution plan validation failed during compilation: {}", e);
