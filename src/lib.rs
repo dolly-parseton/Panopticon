@@ -1,124 +1,50 @@
-mod commands;
-mod dependencies;
+mod data;
+mod error;
+mod execution;
 mod extensions;
-mod namespace;
-mod pipeline;
-#[allow(unused)] // TODO: Remove temporary allow
-mod services;
-mod spec;
-mod values;
+mod hooks;
+mod operation;
+mod param;
+mod state;
 
-// Public API - external consumers use this via `panopticon_core::prelude::*`
 pub mod prelude {
-    // Built-in Commands
-    pub use crate::commands::aggregate::AggregateCommand;
-    pub use crate::commands::condition::ConditionCommand;
-    pub use crate::commands::file::FileCommand;
-    pub use crate::commands::sql::SqlCommand;
-    pub use crate::commands::template::TemplateCommand;
+    pub use crate::execution::{GuardSource, IterSource};
+    pub use crate::hooks::core::*;
+    pub use crate::op_error;
+    pub use crate::operation::core::*;
+    pub use crate::param::{Param, Parameters};
+    pub use crate::params;
 
-    // Pipeline
-    pub use crate::pipeline::Pipeline;
-    pub use crate::pipeline::results::{ResultSettings, ResultStore};
-    pub use crate::services::PipelineServices;
+    pub use crate::state::Pipeline;
 
-    // Namespace
-    pub use crate::namespace::{Namespace, NamespaceBuilder};
+    pub use crate::data::{ArrayHandle, MapHandle, Store, StoreEntry, Type, Value};
 
-    // Context
-    pub use crate::values::scalar::ObjectBuilder;
-    pub use crate::values::scalar::ScalarValue;
-    pub use crate::values::store_path::StorePath;
-    pub use crate::values::tabular::TabularValue;
+    #[cfg(feature = "serde")]
+    pub use crate::data::DeserializeError;
 }
 
-// Extension API - used to add custom commands, etc.
-// Consumers building custom commands use `panopticon_core::extend::*`
 pub mod extend {
-    // Traits - implement these to create a custom command
-    pub use crate::pipeline::traits::{
-        Command, CommandFactory, Descriptor, Executable, FromAttributes,
-    };
-    pub use crate::services::{EventHooks, PipelineIO};
-
-    // Spec types - declare your command's attributes and results
-    pub use crate::spec::{
-        DEFAULT_NAME_POLICY, FieldSpec, LiteralFieldRef, NamePolicy, ObjectFields, ReferenceKind,
-        TypeDef,
-        attribute::{AttributeSpec, Attributes},
-        builder::{AttributeSpecBuilder, CommandSpecBuilder, PendingAttribute},
-        result::{ResultKind, ResultSpec},
-    };
-
-    // Macros
-    pub use crate::attrs;
-
-    // Extensions
-    pub use crate::extensions::ExtensionKey;
-
-    // Value types - used in trait signatures and command implementations
-    pub use crate::values::context::ExecutionContext;
-    pub use crate::values::helpers::{InsertBatch, to_scalar};
-    pub use crate::values::scalar::{ScalarAsExt, ScalarMapExt, ScalarType};
-
-    // Command helper type for LazyLock-time CommandSchemas
-    pub use crate::commands::CommandSchema;
-
-    // Re-exports from external crates needed to implement traits
-    pub use async_trait::async_trait;
-    pub type Result<T> = anyhow::Result<T>;
-    pub use std::sync::LazyLock;
-}
-
-// Internal imports - layers on prelude with crate-internal types and std-lib conveniences.
-// All internal modules use `use crate::imports::*` as their single import line.
-pub(crate) mod imports {
-    pub use crate::extend::*;
     pub use crate::prelude::*;
 
-    // Internal value types (not part of public extend API)
-    pub(crate) use crate::values::helpers::{is_truthy, parse_scalar, scalar_type_of, to_scalar};
-    pub(crate) use crate::values::scalar::ScalarStore;
-    pub(crate) use crate::values::tabular::TabularStore;
-
-    // Namespace internals
-    pub(crate) use crate::namespace::{
-        ExecutionMode, IteratorType, NamespaceHandle, RESERVED_NAMESPACES,
-    };
-
-    // Services internals
-    pub(crate) use crate::services::{EventHooks, PipelineIO, PipelineServices, hook_events};
-
-    // Extensions internals
-    pub(crate) use crate::extensions::Extensions;
-
-    // Spec internals
-    pub(crate) use crate::spec::command::CommandSpec;
-
-    // Pipeline result internals
-    pub(crate) use crate::pipeline::{
-        order::{ExecutionGroup, ExecutionPlan},
-        results::{CommandResults, ResultValue},
-    };
-
-    // Result and error handling (shadow extend::Result with identical definition + add Context)
-    pub type Result<T> = anyhow::Result<T>;
-    pub use anyhow::Context as _;
-
-    // Std library
-    pub use std::collections::{BinaryHeap, HashMap, HashSet};
-    pub use std::path::PathBuf;
-    pub use std::sync::Arc;
-    pub use std::time::Instant;
-    pub use tokio::sync::RwLock;
+    pub use crate::data::{ArrayHandle, MapHandle, Store, StoreEntry, Type, Value};
+    pub use crate::error::*;
+    pub use crate::extensions::{Extension, Extensions};
+    pub use crate::hooks::{Hook, HookAction, HookCallback, HookEvent};
+    pub use crate::operation::*;
+    pub use crate::param::*;
 }
 
-#[cfg(test)]
-pub(crate) mod test_utils {
-    pub fn init_tracing() {
-        let _ = tracing_subscriber::fmt()
-            .with_env_filter("debug")
-            .with_test_writer()
-            .try_init();
-    }
+pub(crate) mod imports {
+    pub use crate::data::*;
+    pub use crate::execution::*;
+    pub use crate::extend::*;
+    pub(crate) use crate::hooks::emit_all;
+    pub use crate::state::*;
+    // pub use crate::param::*;
+
+    // std imports
+    pub use std::any::TypeId;
+    pub use std::collections::HashMap;
+    pub use std::sync::{Arc, Mutex, atomic::AtomicBool};
+    pub use std::thread;
 }

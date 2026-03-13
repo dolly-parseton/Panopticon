@@ -1,6 +1,6 @@
 [package]
 name = "panopticon-core"
-version = "0.2.3"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-only"
@@ -10,70 +10,40 @@ readme = "README.md"
 authors = ["dolly-parseton"]
 keywords = ["pipeline", "data-processing", "templating", "etl", "polars"]
 
+
+[features]
+default = []
+serde = ["dep:serde"]
+
 [dependencies]
-anyhow = "1.0.100"
-async-trait = "0.1.89"
-pest = "2.8.5"
-pest_derive = "2.8.5"
-regex = "1"
-polars = { version = "0.52.0", features = [
-    "sql",
-    "lazy",
-    "parquet",
-    "polars-io",
-    "json",
-] }
-serde = { version = "1.0.228", features = ["derive"] }
-tera = "1.20.1"
-tokio = { version = "1.49.0", features = [
-    "macros",
-    "rt",
-    "rt-multi-thread",
-    "sync",
-    "fs",
-] }
-tokio-util = "0.7.0"
-tracing = "0.1.44"
-tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
-
-[dev-dependencies]
-tempfile = "3"
-
-[build-dependencies]
-ureq = "2.10"
-
-# ─── Prelude examples (using panopticon features) ───
+thiserror = "2"
+serde = { version = "1", features = ["derive"], optional = true }
 
 [[example]]
-name = "multi_format_load"
-path = "examples/prelude/multi_format_load.rs"
+name = "store_scalars"
+path = "examples/extend/store_scalars.rs"
 
 [[example]]
-name = "when_conditional"
-path = "examples/prelude/when_conditional.rs"
+name = "store_collections"
+path = "examples/extend/store_collections.rs"
 
 [[example]]
-name = "template_inheritance"
-path = "examples/prelude/template_inheritance.rs"
+name = "store_nested"
+path = "examples/extend/store_nested.rs"
 
 [[example]]
-name = "iterate_object_keys"
-path = "examples/prelude/iterate_object_keys.rs"
+name = "pipeline"
+path = "examples/pipeline.rs"
 
 [[example]]
-name = "pipeline_reuse"
-path = "examples/prelude/pipeline_reuse.rs"
+name = "iter_array"
+path = "examples/iter_array.rs"
 
 [[example]]
-name = "aggregate_and_export"
-path = "examples/prelude/aggregate_and_export.rs"
-
-# ─── Extend examples (building custom commands) ───
+name = "iter_map"
+path = "examples/iter_map.rs"
 
 [[example]]
-name = "custom_command"
-path = "examples/extend/custom_command.rs"
-
-[[example]]
-name = "command_spec_safety"
-path = "examples/extend/command_spec_safety.rs"
+name = "deserialize"
+path = "examples/deserialize.rs"
+required-features = ["serde"]
