@@ -5,55 +5,163 @@
 [![CI](https://github.com/dolly-parseton/panopticon/actions/workflows/ci.yml/badge.svg)](https://github.com/dolly-parseton/panopticon/actions/workflows/ci.yml)
 [![docs.rs](https://img.shields.io/docsrs/panopticon-core)](https://docs.rs/panopticon-core)
 
-> I wrote this library to encapsulate some required functionality for a series of tools I want to build. This project started with a icky and arguably 'vibe-coded' attempt to build a TUI tool for chaining KQL queries run against Sentinel workspaces (See kql-panopticon). This worked fine at first but fell apart when I started trying to build 'packs', the workflows of 'steps' (now commands) and input parameters. This library provides a way to execute commands in a much safer / observable way and a way to add in new commands. I plan to write commands that implement these traits in other crates and then use the core + extended crates to write more delibrate tooling.
+## Pipeline state machine
 
-## What does it do?
+Pipelines follow a typestate pattern that enforces valid transitions at compile time:
 
-Panopticon-core is a Rust library for building declarative data pipelines. You define commands, wire them together in namespaces, and execute them through a state-machine pipeline (`Draft` → `Ready` → `Completed`). The type system enforces valid transitions at compile time — you can't execute a pipeline that hasn't been compiled, and you can't add commands to one that's already running.
+```
+Pipeline<Draft>  ──compile()──▶  Pipeline<Ready>  ──run()──▶  Pipeline<Running>  ──wait()──▶  Pipeline<Complete>
+```
 
-**Commands** implement three traits: `Descriptor` (schema), `FromAttributes` (construction from key-value pairs), and `Executable` (async execution). Each command declares its expected inputs and outputs through a spec system that validates attribute names, types, and reference kinds. A `CommandSpecBuilder` provides compile-time guarantees — for example, derived result names (where a result's name comes from an attribute value) can only reference fields proven to be literals via an opaque `LiteralFieldRef` type.
+| State        | Purpose                                                                                                             |
+| ------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **Draft**    | Construction. Define variables, steps, iterations, guards, returns, hooks, and extensions.                          |
+| **Ready**    | Validated. `compile()` simulates execution to catch unresolved references, forward references, and missing sources. |
+| **Running**  | Executing in a background thread. Poll status, wait for completion, or cancel.                                      |
+| **Complete** | Finished. Read back the variable store and named return projections.                                                |
 
-**Namespaces** group commands and control execution mode:
-- **Once** — commands run sequentially, one time.
-- **Iterative** — commands run N times over an array, object keys, or table rows, with `item` and `index` injected into context each iteration.
-- **Static** — no execution, just key-value configuration loaded at pipeline start.
+```rust
+use panopticon_core::prelude::*;
 
-During execution, commands read and write to two stores: a **scalar store** (backed by Tera contexts, so values are available in template expressions) and a **tabular store** (Polars DataFrames). Commands can reference other commands' outputs via `StorePath` dot-notation (`namespace.command.field`), and the pipeline resolves dependencies to determine execution order.
+let mut pipe = Pipeline::default();
 
-The library ships with five built-in commands:
-- **file** — load CSV, JSON, or Parquet files into the tabular store.
-- **sql** — run SQL queries against tabular data using Polars' SQL context.
-- **aggregate** — compute sum, mean, min, max, count, etc. over tabular columns.
-- **condition** — evaluate conditional branches using Tera expressions.
-- **template** — render Tera templates to files or capture output as a result.
+pipe.var("name", "world")?;
+pipe.step::<SetVar>("greet", params!("name" => "greeting", "value" => Param::template(vec![
+    Param::literal("hello, "),
+    Param::reference("name"),
+])))?;
+pipe.returns("output", params!("greeting" => Param::reference("greeting")))?;
 
-After execution, a `ResultStore` collects all outputs, writes tabular data to disk in the requested format, and separates metadata (status, duration) from data results.
+let complete = pipe.compile()?.run().wait()?;
+let returns = complete.returns();
+```
 
-### Examples
+## Data model
 
-`examples/prelude/` covers pipeline usage:
-- `aggregate_and_export.rs` — load CSV, run aggregations, export results.
-- `when_conditional.rs` — conditionally skip commands using the `when` attribute.
-- `pipeline_reuse.rs` — re-enter Draft from Completed to add commands and re-execute.
-- `iterate_object_keys.rs` — iterate over object keys in a namespace.
-- `template_inheritance.rs` — render Tera templates with inheritance.
-- `multi_format_load.rs` — load CSV, JSON, and Parquet in one pipeline.
+The store is built on three types:
 
-`examples/extend/` covers implementing new commands:
-- `custom_command.rs` — implement a custom command end-to-end (Descriptor, FromAttributes, Executable) and run it in a pipeline.
-- `command_spec_safety.rs` — demonstrates the `CommandSpecBuilder` safety mechanisms: `LiteralFieldRef` compile-time proofs, `NamePolicy` violations, and builder validation errors.
+- **`Value`** — scalars: `Null`, `Boolean(bool)`, `Integer(i64)`, `Float(f64)`, `Text(String)`.
+- **`StoreEntry`** — recursive nodes: `Var { value, ty }`, `Array(Vec<StoreEntry>)`, `Map(HashMap<String, StoreEntry>)`.
+- **`Store<StoreEntry>`** — a flat `HashMap<String, StoreEntry>` with controlled mutation and duplicate rejection.
 
-## What's next?
+Builder-style handles (`ArrayHandle`, `MapHandle`) allow ergonomic collection construction:
 
-* Additional safety checks at compile and lazylock time.
-* Narrow the extend API surface, starting with AttributeSpec used in CommandSpecBuilder, need to write a builder or change the attribute function.
-* Extend the spec types to support more verbose ResultStore schema (Maybe consider a ser/de approach to result capture using the specs as a schema?)
-* Add some serde support for the specs.
-* ~~Write actual documentation, lol~~ Generated some documentation, will need to read it and hand re-write some bits but better than nothing for now, left space for handwritten introductions, see github pages for documentation.
-* Create a dedicated `panopticon-kql` crate that uses the `panopticon-core` traits. Will likely write two commands, one for Defender XDR (via the Graph API) and one for Sentinel workspaces (basically already done in the previous tool attempts).
-* Explore forensic parser integrations, for example a command type that can expose a EVTX file as a TabularValue. Lots of very fun applications for something like this.
-* Finish the TUI attempt started in `kql-panopticon` but using this library and pipeline approach. I think the way I've written the API lends itself well to the REPL approach started but I wasn't engaged enough in how the Ratatui library was being used and alot of functionality got conflated in with the UI (so it's not a quick fix, better to focus on deliberate CLIs for specific tasks).
+```rust
+pipe.array("items")?.push(1)?.push(2)?.push(3)?;
+pipe.map("config")?.insert("host", "localhost")?.insert("port", "8080")?;
+```
 
-### Changelog
-1. v0.1.0 - Initial implementation
-2. v0.2.0 - Added in the extensions and services modules. Services are specific bits of functionality I want to allow consumers of this library to extend, that includes PipelineIO and EventHooks right now. `Extensions` is a new type that lives inside `ExecutionContext`, runtime within `Pipeline::<Ready>` during execution. The inner map can contain an Arc of a specific type. The idea is certain commands will want to generate and or consume a shared type, for example a HTTP client (the use case that drove the design of these type). Added tokio_utils CancellationToken as a test of extensions, this is a built in example but the M365 crate client will be a true extension.
+## Operations
+
+Operations implement a single trait:
+
+```rust
+pub trait Operation: 'static {
+    fn metadata() -> OperationMetadata where Self: Sized;
+    fn execute(context: &mut Context) -> Result<(), OperationError>;
+}
+```
+
+`OperationMetadata` declares inputs, outputs, and required extensions. At execution time, an operation reads inputs and writes outputs through `Context`, which validates types and resolves output names according to `NameSpec` (static, derived from an input value, or derived with a default).
+
+### Built-in operations
+
+| Operation | Description                                                                              |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `SetVar`  | Set a global store variable with a name derived from the `name` input.                   |
+| `Get`     | Index into an array or look up a map key.                                                |
+| `Compare` | Compare two values (`eq`, `neq`, `gt`, `gte`, `lt`, `lte`) with cross-numeric promotion. |
+| `Coerce`  | Convert between scalar types (`Boolean`, `Integer`, `Float`, `Text`).                    |
+| `Dedupe`  | Remove duplicate entries from an array, preserving insertion order.                      |
+| `Len`     | Return the length of text (chars), an array, or a map.                                   |
+
+## Execution nodes
+
+Steps are organized into an execution tree with four node types:
+
+| Node          | Description                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Step**      | Execute a single operation with resolved parameters.                                                                                                                                                         |
+| **IterArray** | Iterate over an array source. Each iteration receives `__index` and `__item` bindings in a **cloned store** for isolation. New keys are diffed back into the parent store under `{iter_name}.{index}.{key}`. |
+| **IterMap**   | Iterate over a map source. Each iteration receives `__key` and `__value` bindings with the same cloned-store isolation as array iteration.                                                                   |
+| **Guard**     | Conditionally execute a body based on a boolean reference. Guards share the parent scope — outputs are visible to subsequent steps.                                                                          |
+
+Nodes can be nested (guards inside iterations, iterations inside guards, etc.):
+
+```rust
+pipe.iter_array("loop", IterSource::array("items"), |_index, item, body| {
+    body.guard("check", GuardSource::boolean("flag"), |inner| {
+        inner.step::<SetVar>("capture", params!(
+            "name" => "result",
+            "value" => Param::reference(item),
+        ))?;
+        Ok(())
+    })?;
+    Ok(())
+})?;
+```
+
+## Hooks
+
+Hooks observe or intercept pipeline events. There are two callback types:
+
+- **Observer** — read-only access to the event and store. Cannot abort execution.
+- **Interceptor** — can return `HookAction::Abort(reason)` to stop the pipeline.
+
+Events include `BeforeStep`, `AfterStep`, `BeforeIteration`, `AfterIteration`, `GuardPassed`, `GuardFailed`, `BeforeReturns`, `AfterReturns`, `Complete`, and `Error`.
+
+### Built-in hooks
+
+| Hook             | Type        | Description                                                                            |
+| ---------------- | ----------- | -------------------------------------------------------------------------------------- |
+| `Logger`         | Observer    | Formatted event output to any `Write` sink (default: stderr).                          |
+| `EventLog`       | Observer    | Structured event capture into `Arc<Mutex<Vec<EventRecord>>>` for post-mortem analysis. |
+| `Profiler`       | Observer    | Per-step wall-clock timing with summary table on completion.                           |
+| `StepFilter`     | Interceptor | Allow-list or deny-list for step names; aborts on violation.                           |
+| `StoreValidator` | Interceptor | Assert presence and type of store keys after steps; aborts on failure.                 |
+| `Timeout`        | Interceptor | Abort execution if elapsed time exceeds a limit.                                       |
+
+```rust
+pipe.hook(Logger::default());
+pipe.hook(Timeout::new(Duration::from_secs(30)));
+```
+
+## Extensions
+
+Extensions let operations share services (HTTP clients, database connections, etc.) through a typed, named container. Any type implementing `Extension` (requires `Clone + Send + Sync + 'static`) can be registered at draft time and accessed by operations via `Context::extension::<T>(name)`.
+
+```rust
+pipe.extension("my_client", my_http_client);
+```
+
+Operations declare required extensions in their metadata and access them during execution.
+
+## Features
+
+| Feature | Description                                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serde` | Enables `Pipeline<Complete>::deserialize_returns::<T>(name)` to deserialize named return blocks into any `serde::de::DeserializeOwned` type. |
+
+## Examples
+
+| Example                    | Description                                                        |
+| -------------------------- | ------------------------------------------------------------------ |
+| `pipeline`                 | Full pipeline usage with steps, returns, error cases, and hooks.   |
+| `guard`                    | Guard control flow with conditional execution.                     |
+| `iter_array`               | Array iteration with cloned-store isolation.                       |
+| `iter_map`                 | Map iteration over key-value pairs.                                |
+| `deserialize`              | Deserialize returns into Rust types (requires `--features serde`). |
+| `extend/store_scalars`     | Store scalar API usage.                                            |
+| `extend/store_collections` | Store collection API with `ArrayHandle` and `MapHandle`.           |
+| `extend/store_nested`      | Complex nested store structures.                                   |
+
+```sh
+cargo run --example pipeline
+cargo run --example deserialize --features serde
+```
+
+## Changelog
+
+1. **v0.1.0** — Initial implementation.
+2. **v0.2.0** — Added extensions and services modules. Extensions live inside `ExecutionContext` and allow operations to share typed state (e.g. HTTP clients) via `Arc`. Added `CancellationToken` as a built-in extension example.
+3. **v0.3.0** — Simplified the execution model. Removed Tera, Polars, tabular stores, and file I/O commands. Replaced the three-trait Command system (`Descriptor`/`FromAttributes`/`Executable`) with a single `Operation` trait. Added the hooks system with six built-in hooks. Added compile-time dependency validation. Data processing is now an extension crate concern.

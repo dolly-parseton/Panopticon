@@ -4,11 +4,11 @@ version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-only"
-description = "An extensible data processing and templating engine."
+description = "A typestate pipeline engine with compile-time validation, hooks, and an extension system."
 repository = "https://github.com/dolly-parseton/panopticon"
 readme = "README.md"
 authors = ["dolly-parseton"]
-keywords = ["pipeline", "data-processing", "templating", "etl", "polars"]
+keywords = ["pipeline", "typestate", "execution-engine", "hooks", "extensible"]
 
 
 [features]
@@ -30,6 +30,10 @@ path = "examples/extend/store_collections.rs"
 [[example]]
 name = "store_nested"
 path = "examples/extend/store_nested.rs"
+
+[[example]]
+name = "guard"
+path = "examples/guard.rs"
 
 [[example]]
 name = "pipeline"
