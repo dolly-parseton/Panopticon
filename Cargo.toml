@@ -1,53 +1,23 @@
-[package]
-name = "panopticon-core"
+[workspace]
+resolver = "2"
+members = [
+    "crates/panopticon-core",
+    "crates/panopticon-schema",
+    # "crates/panopticon-m365",
+]
+
+[workspace.package]
 version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-only"
-description = "A typestate pipeline engine with compile-time validation, hooks, and an extension system."
 repository = "https://github.com/dolly-parseton/panopticon"
-readme = "README.md"
 authors = ["dolly-parseton"]
-keywords = ["pipeline", "typestate", "execution-engine", "hooks", "extensible"]
 
-
-[features]
-default = []
-serde = ["dep:serde"]
-
-[dependencies]
+[workspace.dependencies]
+panopticon-core = { path = "crates/panopticon-core", version = "0.3" }
+# panopticon-m365 = { path = "crates/panopticon-m365", version = "0.1" }
 thiserror = "2"
-serde = { version = "1", features = ["derive"], optional = true }
-
-[[example]]
-name = "store_scalars"
-path = "examples/extend/store_scalars.rs"
-
-[[example]]
-name = "store_collections"
-path = "examples/extend/store_collections.rs"
-
-[[example]]
-name = "store_nested"
-path = "examples/extend/store_nested.rs"
-
-[[example]]
-name = "guard"
-path = "examples/guard.rs"
-
-[[example]]
-name = "pipeline"
-path = "examples/pipeline.rs"
-
-[[example]]
-name = "iter_array"
-path = "examples/iter_array.rs"
-
-[[example]]
-name = "iter_map"
-path = "examples/iter_map.rs"
-
-[[example]]
-name = "deserialize"
-path = "examples/deserialize.rs"
-required-features = ["serde"]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"

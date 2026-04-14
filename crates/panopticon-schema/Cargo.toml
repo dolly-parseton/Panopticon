@@ -1,0 +1,29 @@
+[package]
+name = "panopticon-schema"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Strict-schema YAML deserialisation into panopticon-core Pipeline<Draft> instances."
+readme = "README.md"
+keywords = ["pipeline", "yaml", "schema", "panopticon"]
+
+[dependencies]
+panopticon-core = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+
+[[example]]
+name = "load_yaml"
+path = "examples/load_yaml.rs"
+
+[[example]]
+name = "tag_triage"
+path = "examples/tag_triage.rs"
+
+[[example]]
+name = "round_trip"
+path = "examples/round_trip.rs"

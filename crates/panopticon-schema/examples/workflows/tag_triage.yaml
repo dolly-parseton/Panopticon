@@ -1,0 +1,196 @@
+version: v1
+
+# Tag triage workflow.
+#
+# Takes a noisy list of tags collected from several upstream sources, dedupes
+# them, counts the unique entries, decides whether the count exceeds a
+# threshold, routes the first tag through a service lookup, and (if the
+# threshold is met) builds a human-readable alert summary.
+#
+# Demonstrates: Dedupe, Len, Compare, Get (array index + map key), Coerce,
+# SetVar, and a guard gated on a compare result.
+#
+# Scoping note: non-SetVar core ops write their output under a key
+# `{step_name}.result` (OutputScope::Operation) — so downstream steps refer
+# to `dedupe_raw.result`, not just `result`. SetVar is the exception: it
+# writes globally under the name given by its `name` input.
+
+variables:
+  raw_tags:
+    type: array
+    value:
+      - type: text
+        value: critical
+      - type: text
+        value: production
+      - type: text
+        value: critical          # duplicate
+      - type: text
+        value: database
+      - type: text
+        value: production        # duplicate
+      - type: text
+        value: high-priority
+      - type: text
+        value: database          # duplicate
+
+  alert_threshold:
+    type: integer
+    value: 3
+
+  service_map:
+    type: map
+    value:
+      critical:
+        type: text
+        value: "PagerDuty-P1"
+      production:
+        type: text
+        value: "prod-cluster-east"
+      database:
+        type: text
+        value: "Postgres-Primary"
+      high-priority:
+        type: text
+        value: "Slack-#oncall"
+
+steps:
+  # 1. Remove duplicates from the raw tag list. Output: dedupe_raw.result
+  - name: dedupe_raw
+    type: step
+    op: Dedupe
+    params:
+      array:
+        type: ref
+        value: raw_tags
+
+  # 2. Count the number of unique tags. Output: count_unique.result
+  - name: count_unique
+    type: step
+    op: Len
+    params:
+      source:
+        type: ref
+        value: dedupe_raw.result
+
+  # 3. Is the unique count at or above the alert threshold?
+  #    Output: check_threshold.result (boolean)
+  - name: check_threshold
+    type: step
+    op: Compare
+    params:
+      left:
+        type: ref
+        value: count_unique.result
+      op:
+        type: literal
+        value:
+          type: text
+          value: gte
+      right:
+        type: ref
+        value: alert_threshold
+
+  # 4. Pull the first unique tag (array index 0).
+  #    Output: pick_primary_tag.result
+  - name: pick_primary_tag
+    type: step
+    op: Get
+    params:
+      source:
+        type: ref
+        value: dedupe_raw.result
+      key:
+        type: literal
+        value:
+          type: integer
+          value: 0
+
+  # 5. Look that tag up in the service routing map.
+  #    Output: route_primary.result
+  - name: route_primary
+    type: step
+    op: Get
+    params:
+      source:
+        type: ref
+        value: service_map
+      key:
+        type: ref
+        value: pick_primary_tag.result
+
+  # 6. Coerce the integer count into text so we can embed it in a message.
+  #    Output: count_to_text.result
+  - name: count_to_text
+    type: step
+    op: Coerce
+    params:
+      value:
+        type: ref
+        value: count_unique.result
+      type:
+        type: literal
+        value:
+          type: text
+          value: Text
+
+  # 7. Only build the alert message when should_alert is true. The guard
+  #    shares parent scope, so the SetVar inside the body writes the
+  #    `alert_message` variable at the top level where the returns block
+  #    can see it. SetVar uses OutputScope::Global, so it is not prefixed
+  #    by the step name.
+  - name: alert_if_needed
+    type: guard
+    source: check_threshold.result
+    body:
+      - name: build_message
+        type: step
+        op: SetVar
+        params:
+          name:
+            type: literal
+            value:
+              type: text
+              value: alert_message
+          value:
+            type: template
+            value:
+              - type: literal
+                value:
+                  type: text
+                  value: "ALERT: "
+              - type: ref
+                value: count_to_text.result
+              - type: literal
+                value:
+                  type: text
+                  value: " unique tags detected. Primary route: "
+              - type: ref
+                value: route_primary.result
+
+returns:
+  triage:
+    raw_tags:
+      type: ref
+      value: raw_tags
+    unique_tags:
+      type: ref
+      value: dedupe_raw.result
+    unique_count:
+      type: ref
+      value: count_unique.result
+    should_alert:
+      type: ref
+      value: check_threshold.result
+    primary_tag:
+      type: ref
+      value: pick_primary_tag.result
+    primary_service:
+      type: ref
+      value: route_primary.result
+    count_text:
+      type: ref
+      value: count_to_text.result
+    alert_message:
+      type: ref
+      value: alert_message

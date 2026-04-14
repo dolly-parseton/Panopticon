@@ -1,0 +1,23 @@
+[package]
+name = "panopticon-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "A typestate pipeline engine with compile-time validation, hooks, and an extension system."
+readme = "../../README.md"
+keywords = ["pipeline", "typestate", "execution-engine", "hooks", "extensible"]
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+
+[[example]]
+name = "deserialize"
+required-features = ["serde"]

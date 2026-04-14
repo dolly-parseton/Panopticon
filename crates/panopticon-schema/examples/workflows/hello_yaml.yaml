@@ -1,0 +1,66 @@
+version: v1
+
+# A minimal workflow that exercises variables, a templated step, an iter_array
+# body, and a returns block — using only operations from panopticon-core so it
+# runs without any extensions or extra ops registered.
+
+variables:
+  prefix:
+    type: text
+    value: "hello, "
+  target:
+    type: text
+    value: world
+  items:
+    type: array
+    value:
+      - type: integer
+        value: 10
+      - type: integer
+        value: 20
+      - type: integer
+        value: 30
+
+steps:
+  - name: build_greeting
+    type: step
+    op: SetVar
+    params:
+      name:
+        type: literal
+        value:
+          type: text
+          value: greeting
+      value:
+        type: template
+        value:
+          - type: ref
+            value: prefix
+          - type: ref
+            value: target
+
+  - name: walk
+    type: iter_array
+    source: items
+    body:
+      - name: capture
+        type: step
+        op: SetVar
+        params:
+          name:
+            type: literal
+            value:
+              type: text
+              value: current_item
+          value:
+            type: ref
+            value: walk.__item
+
+returns:
+  summary:
+    greeting:
+      type: ref
+      value: greeting
+    items:
+      type: ref
+      value: items
