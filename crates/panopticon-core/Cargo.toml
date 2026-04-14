@@ -7,7 +7,7 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "A typestate pipeline engine with compile-time validation, hooks, and an extension system."
-readme = "../../README.md"
+readme = "README.md"
 keywords = ["pipeline", "typestate", "execution-engine", "hooks", "extensible"]
 
 [features]
